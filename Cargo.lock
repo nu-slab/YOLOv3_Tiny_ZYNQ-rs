@@ -776,6 +776,7 @@ dependencies = [
  "anyhow",
  "image",
  "log",
+ "serde_json",
  "xipdriver-rs",
 ]
 
@@ -822,7 +823,7 @@ dependencies = [
 [[package]]
 name = "xipdriver-rs"
 version = "0.2.0"
-source = "git+https://github.com/nu-slab/xipdriver-rs.git#200f46ef7101a8b74ce503b0e45b07e842add276"
+source = "git+https://github.com/nu-slab/xipdriver-rs.git#1baa2e7cf4bf1df55815584428bf7cb76a0d5a25"
 dependencies = [
  "anyhow",
  "image",

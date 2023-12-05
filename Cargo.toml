@@ -9,4 +9,5 @@ edition = "2021"
 anyhow = "1.0.75"
 image = "0.24.7"
 log = "0.4.20"
+serde_json = "1.0.108"
 xipdriver-rs = { git = "https://github.com/nu-slab/xipdriver-rs.git", version = "0.2.0" }
