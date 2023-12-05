@@ -1,11 +1,28 @@
 use std::{ffi::OsStr, io::Read, path::Path, vec};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use image::DynamicImage;
 use log::info;
 
-use crate::{layer_group::{Activation, LayerGroup, PostProcess}, utils::{DetectionData, self}, img_proc};
-use xipdriver_rs::{axidma, axis_switch, yolo};
+use crate::{
+    img_proc,
+    layer_group::{Activation, LayerGroup, PostProcess},
+    utils::{self, DetectionData},
+};
+use xipdriver_rs::{axidma, axis_switch, json_as_map, json_as_str, yolo};
+
+pub fn match_hw(hw_json: &serde_json::Value, hier_name: &str, hw_name: &str) -> Result<String> {
+    let hw_object = json_as_map!(hw_json);
+    let full_name = format!("/{}/{}", hier_name, hw_name);
+    for k in hw_object.keys() {
+        if let Some(_) = k.find(hier_name) {
+            if json_as_str!(hw_object[k]["fullname"]) == full_name {
+                return Ok(k.clone());
+            }
+        }
+    }
+    Err(anyhow!("hw object not found: {}, {}", hier_name, hw_name))
+}
 
 const ACTIVE_EN: [u32; 8] = [
     0xfffffff3, 0xffffffff, 0xfe7fffff, 0xffffffff, 0xffffffff, 0xffffcfff, 0xffffffff, 0x7fffffff,
@@ -31,27 +48,31 @@ pub struct YoloV3Tiny {
 
 impl YoloV3Tiny {
     /// コンストラクタ
-    pub fn new(hwinfo_path: &str, yolo_hier: &str, cls_num: usize, obj_threshold: f32, nms_threshold: f32) -> Result<Self> {
+    pub fn new<S: AsRef<OsStr> + ?Sized>(
+        hwinfo_path: &str,
+        yolo_hier: &str,
+        cls_num: usize,
+        obj_threshold: f32,
+        nms_threshold: f32,
+        weights_dir: &S,
+        biases_dir: &S,
+    ) -> Result<Self> {
         // ハードウェア情報の読み込み
         let hw_json = xipdriver_rs::hwinfo::read(hwinfo_path)?;
 
         // ハードウェア名を取得
-        let sw0_name = xipdriver_rs::hwinfo::match_hw(&hw_json, yolo_hier, "axis_switch_0")?;
-        let sw1_name = xipdriver_rs::hwinfo::match_hw(&hw_json, yolo_hier, "axis_switch_1")?;
-        let sw2_name = xipdriver_rs::hwinfo::match_hw(&hw_json, yolo_hier, "axis_switch_2")?;
+        let sw0_name = match_hw(&hw_json, yolo_hier, "axis_switch_0")?;
+        let sw1_name = match_hw(&hw_json, yolo_hier, "axis_switch_1")?;
+        let sw2_name = match_hw(&hw_json, yolo_hier, "axis_switch_2")?;
 
-        let dma0_name = xipdriver_rs::hwinfo::match_hw(&hw_json, yolo_hier, "axi_dma_0")?;
-        let dma1_name = xipdriver_rs::hwinfo::match_hw(&hw_json, yolo_hier, "axi_dma_1")?;
+        let dma0_name = match_hw(&hw_json, yolo_hier, "axi_dma_0")?;
+        let dma1_name = match_hw(&hw_json, yolo_hier, "axi_dma_1")?;
 
-        let yolo_acc_name = xipdriver_rs::hwinfo::match_hw(&hw_json, yolo_hier, "yolo_acc_top_0")?;
-        let yolo_conv_name =
-            xipdriver_rs::hwinfo::match_hw(&hw_json, yolo_hier, "yolo_conv_top_0")?;
-        let yolo_mp_name =
-            xipdriver_rs::hwinfo::match_hw(&hw_json, yolo_hier, "yolo_max_pool_top_0")?;
-        let yolo_yolo_name =
-            xipdriver_rs::hwinfo::match_hw(&hw_json, yolo_hier, "yolo_yolo_top_0")?;
-        let yolo_upsamp_name =
-            xipdriver_rs::hwinfo::match_hw(&hw_json, yolo_hier, "yolo_upsamp_top_0")?;
+        let yolo_acc_name = match_hw(&hw_json, yolo_hier, "yolo_acc_top_0")?;
+        let yolo_conv_name = match_hw(&hw_json, yolo_hier, "yolo_conv_top_0")?;
+        let yolo_mp_name = match_hw(&hw_json, yolo_hier, "yolo_max_pool_top_0")?;
+        let yolo_yolo_name = match_hw(&hw_json, yolo_hier, "yolo_yolo_top_0")?;
+        let yolo_upsamp_name = match_hw(&hw_json, yolo_hier, "yolo_upsamp_top_0")?;
 
         info!("sw0_name: {}", sw0_name);
         info!("sw1_name: {}", sw1_name);
@@ -69,8 +90,8 @@ impl YoloV3Tiny {
         let sw1 = axis_switch::AxisSwitch::new(&hw_json[sw1_name])?;
         let sw2 = axis_switch::AxisSwitch::new(&hw_json[sw2_name])?;
 
-        let dma0 = axidma::AxiDma::new(&hw_json[dma0_name])?;
-        let dma1 = axidma::AxiDma::new(&hw_json[dma1_name])?;
+        let mut dma0 = axidma::AxiDma::new(&hw_json[dma0_name])?;
+        let mut dma1 = axidma::AxiDma::new(&hw_json[dma1_name])?;
 
         let yolo_acc = yolo::Yolo::new(&hw_json[yolo_acc_name])?;
         let yolo_conv = yolo::Yolo::new(&hw_json[yolo_conv_name])?;
@@ -78,7 +99,10 @@ impl YoloV3Tiny {
         let yolo_yolo = yolo::Yolo::new(&hw_json[yolo_yolo_name])?;
         let yolo_upsamp = yolo::Yolo::new(&hw_json[yolo_upsamp_name])?;
 
-        Ok(Self {
+        dma0.start();
+        dma1.start();
+
+        let mut s = Self {
             sw0,
             sw1,
             sw2,
@@ -93,7 +117,10 @@ impl YoloV3Tiny {
             cls_num,
             obj_threshold,
             nms_threshold,
-        })
+        };
+        s.init(weights_dir, biases_dir);
+
+        Ok(s)
     }
 
     fn set_yolo_conv(&self, grp_idx: usize) {
@@ -301,12 +328,15 @@ impl YoloV3Tiny {
     fn transfer_acc_input(&mut self, acc_input_buff: &[i16]) -> Result<()> {
         self.dma1.write(acc_input_buff)
     }
+
     fn transfer_acc_output(&mut self, grp_idx: usize) -> Result<Vec<i16>> {
-        let data = self
-            .dma0
-            .read(self.layer_groups[grp_idx].output_size as usize);
-        while !self.dma0.is_s2mm_idle()? {}
-        data
+        self.dma0
+            .read(self.layer_groups[grp_idx].acc_size as usize)
+    }
+
+    fn transfer_output(&mut self, grp_idx: usize) -> Result<Vec<i16>> {
+        self.dma0
+            .read(self.layer_groups[grp_idx].output_size as usize)
     }
 
     fn transfer_inputs(&mut self, grp_idx: usize, idx: u32) -> Result<()> {
@@ -332,7 +362,7 @@ impl YoloV3Tiny {
         } else {
             self.transfer_inputs(grp_idx, off)?;
         }
-        let output = self.transfer_acc_output(grp_idx)?;
+        let output = self.transfer_output(grp_idx)?;
         self.layer_groups[grp_idx].set_outputs(off, output);
 
         self.wait_ips(grp_idx);
@@ -347,7 +377,6 @@ impl YoloV3Tiny {
         acc_output_buff: &mut Vec<i16>,
     ) -> Result<()> {
         self.transfer_inputs(grp_idx, iff)?;
-
         self.transfer_acc_input(acc_input_buff)?;
         *acc_output_buff = self.transfer_acc_output(grp_idx)?;
 
@@ -485,7 +514,7 @@ impl YoloV3Tiny {
             } else if grp_idx == 10 {
                 // レイヤ11の入力はレイヤ8
                 self.layer_groups[11].inputs = self.layer_groups[8].outputs.take();
-            } else {
+            } else if grp_idx != 13 {
                 // あとで使わないものはmoveして高速化
                 self.layer_groups[grp_idx + 1].inputs = self.layer_groups[grp_idx].outputs.take();
             }
@@ -526,6 +555,24 @@ impl YoloV3Tiny {
 
         let (yolo_out_0, yolo_out_1) = self.start_processing(&input_data)?;
 
-        Ok(utils::post_process(&yolo_out_0, &yolo_out_1, self.cls_num, self.obj_threshold, self.nms_threshold))
+        Ok(utils::post_process(
+            &yolo_out_0,
+            &yolo_out_1,
+            self.cls_num,
+            self.obj_threshold,
+            self.nms_threshold,
+        ))
+    }
+
+    pub fn stop_dmas(&self) {
+        self.dma0.stop();
+        self.dma1.stop();
+    }
+}
+
+impl Drop for YoloV3Tiny {
+    // デストラクタ (スレッドを停止)
+    fn drop(&mut self) {
+        self.stop_dmas();
     }
 }

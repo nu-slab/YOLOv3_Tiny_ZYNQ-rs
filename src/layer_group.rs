@@ -94,7 +94,7 @@ impl LayerGroup {
         match &self.weights {
             Some(w) => {
                 let weight_size = 12 * self.input_ch * self.output_ch;
-                let data_beg = (weight_size * self.output_fold_factor * iff + 12 * weight_size * off) as usize;
+                let data_beg = (weight_size * self.output_fold_factor * iff + weight_size * off) as usize;
                 let data_end = data_beg + weight_size as usize;
                 Ok(&w[data_beg..data_end])
             },
@@ -122,18 +122,16 @@ impl LayerGroup {
         }
     }
     pub fn set_outputs(&mut self, off: u32, output: Vec<i16>) {
-        let data_beg = (self.output_size * off) as usize;
-        let data_end = data_beg + self.output_size as usize;
         match &mut self.outputs {
             Some(o) => {
-                o.splice(data_beg..data_end, output);
+                o.extend(output);
             },
             None => {
                 if off == 0 {
                     self.outputs = Some(output);
                 }
                 else {
-                    let mut new_output = vec![0; data_beg];
+                    let mut new_output = vec![0; (self.output_size * off) as usize];
                     new_output.extend(output);
                     self.outputs = Some(new_output);
                 }

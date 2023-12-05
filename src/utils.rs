@@ -72,13 +72,13 @@ pub fn post_process(
     //channel reshape 256ch >> 255ch
     //13*13*256 >> 13*13*255
     //26*26*256 >> 26*26*255
-    let mut grid13_array_reshape = vec![];
-    let mut grid26_array_reshape = vec![];
-    let mut grid13_array_class = vec![];
-    let mut grid26_array_class = vec![];
+    let anchor_box_num = 3;
+    let mut grid13_array_reshape = vec![0.; grid_13 * grid_13 * 18];
+    let mut grid26_array_reshape = vec![0.; grid_26 * grid_26 * 18];
+    let mut grid13_array_class = vec![0.; grid_13*grid_13*anchor_box_num*cls_num];
+    let mut grid26_array_class = vec![0.; grid_26*grid_26*anchor_box_num*cls_num];
 
     let mut cnt_cls = 0;
-    let anchor_box_num = 3;
 
     for i in (0..grid_13 * grid_13 * 18).step_by(18) {
         for j in 0..anchor_box_num {
