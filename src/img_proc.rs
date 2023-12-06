@@ -1,5 +1,8 @@
 use image::imageops::FilterType;
-use image::{DynamicImage, RgbImage};
+use image::{DynamicImage, RgbImage, Pixel};
+
+use crate::thick_xiaolin_wu::draw_line;
+use crate::utils::DetectionData;
 
 pub fn rotate_img(img: DynamicImage, angle: u32) -> DynamicImage {
     match angle {
@@ -40,4 +43,32 @@ pub fn letterbox_img(img: DynamicImage, size: u32, rotate_angle: u32) -> RgbImag
         new_img.put_pixel(x + pad_w, y + pad_h, pixel);
     }
     new_img
+}
+
+const COLORS: [[u8; 3]; 10] = [
+    [255, 0, 0],
+    [255, 255, 0],
+    [0, 0, 255],
+    [14, 23, 50],
+    [28, 105, 80],
+    [190, 159, 53],
+    [46, 194, 148],
+    [242, 30, 131],
+    [97, 101, 198],
+    [115, 11, 87],
+];
+
+fn draw_rect(img: &mut image::RgbImage, x1: f32, y1: f32, x2: f32, y2: f32, color: image::Rgb<u8>) {
+    let thickness = 3.;
+    draw_line(img, x1, y1, x1, y2, thickness, color);
+    draw_line(img, x1, y2, x2, y2, thickness, color);
+    draw_line(img, x1, y1, x2, y1, thickness, color);
+    draw_line(img, x2, y1, x2, y2, thickness, color);
+}
+
+pub fn draw_bbox(img: &mut image::RgbImage, d_result: &[DetectionData]) {
+    for d in d_result.iter() {
+        let color: image::Rgb<u8> = *image::Rgb::from_slice(&COLORS[d.class as usize]);
+        draw_rect(img, d.x1, d.y1, d.x2, d.y2, color);
+    }
 }
