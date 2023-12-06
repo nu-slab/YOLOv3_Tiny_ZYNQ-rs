@@ -7,7 +7,7 @@ use log::info;
 use crate::{
     img_proc,
     layer_group::{Activation, LayerGroup, PostProcess},
-    utils::{self, DetectionData},
+    utils::{self, reverse_transform, DetectionData},
 };
 use xipdriver_rs::{axidma, axis_switch, json_as_map, json_as_str, yolo};
 
@@ -330,8 +330,7 @@ impl YoloV3Tiny {
     }
 
     fn transfer_acc_output(&mut self, grp_idx: usize) -> Result<Vec<i16>> {
-        self.dma0
-            .read(self.layer_groups[grp_idx].acc_size as usize)
+        self.dma0.read(self.layer_groups[grp_idx].acc_size as usize)
     }
 
     fn transfer_output(&mut self, grp_idx: usize) -> Result<Vec<i16>> {
@@ -554,13 +553,19 @@ impl YoloV3Tiny {
         let input_data = img_proc::letterbox(img, img_size, rotate_angle);
 
         let (yolo_out_0, yolo_out_1) = self.start_processing(&input_data)?;
-
-        Ok(utils::post_process(
+        let pp = utils::post_process(
             &yolo_out_0,
             &yolo_out_1,
             self.cls_num,
             self.obj_threshold,
             self.nms_threshold,
+        );
+
+        Ok(reverse_transform(
+            img.width(),
+            img.height(),
+            rotate_angle,
+            &pp,
         ))
     }
 

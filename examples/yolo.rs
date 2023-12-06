@@ -1,9 +1,8 @@
 use anyhow::Result;
 use std::time::Instant;
 
-use tiny_yolo_v3_zynq_rs::img_proc::{letterbox_img, draw_bbox};
+use tiny_yolo_v3_zynq_rs::img_proc::draw_bbox;
 use tiny_yolo_v3_zynq_rs::yolo::YoloV3Tiny;
-
 
 fn main() -> Result<()> {
     let wdir = "examples/weights";
@@ -20,10 +19,11 @@ fn main() -> Result<()> {
     println!("{:?}", result);
     println!("Processing time:{:.03}ms, {:.1}FPS", t, 1000. / t);
 
-    let mut lb_img = letterbox_img(&test_img, 416, 0);
+    let mut rgb_img = test_img.to_rgb8();
+    draw_bbox(&mut rgb_img, &result);
 
-    draw_bbox(&mut lb_img, &result);
-    lb_img.save("out.png")?;
+    std::fs::create_dir_all("./out")?;
+    rgb_img.save("./out/out.png")?;
 
     Ok(())
 }

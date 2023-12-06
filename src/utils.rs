@@ -75,8 +75,8 @@ pub fn post_process(
     let anchor_box_num = 3;
     let mut grid13_array_reshape = vec![0.; grid_13 * grid_13 * 18];
     let mut grid26_array_reshape = vec![0.; grid_26 * grid_26 * 18];
-    let mut grid13_array_class = vec![0.; grid_13*grid_13*anchor_box_num*cls_num];
-    let mut grid26_array_class = vec![0.; grid_26*grid_26*anchor_box_num*cls_num];
+    let mut grid13_array_class = vec![0.; grid_13 * grid_13 * anchor_box_num * cls_num];
+    let mut grid26_array_class = vec![0.; grid_26 * grid_26 * anchor_box_num * cls_num];
 
     let mut cnt_cls = 0;
 
@@ -240,8 +240,7 @@ pub fn post_process(
             && (0. <= nms_box.y2 && nms_box.y2 <= 416.)
         {
             nms_boxes.push(nms_box);
-        }
-        else {
+        } else {
             error!("nms_box out of range: {:?}", nms_box);
         }
     }
@@ -281,7 +280,6 @@ fn iou(a: &DetectionData, b: &DetectionData) -> f32 {
     return area1 as f32 / area2 as f32;
 }
 
-
 fn nms(bb: &[DetectionData], nms_threshold: f32) -> Vec<DetectionData> {
     let mut sorted_bb = bb.to_vec();
     sorted_bb.sort_by(|a, b| a.confidence.partial_cmp(&b.confidence).unwrap());
@@ -299,8 +297,12 @@ fn nms(bb: &[DetectionData], nms_threshold: f32) -> Vec<DetectionData> {
     sorted_bb
 }
 
-
-fn nms_process(bb: &[DetectionData], cls_num: usize, obj_threshold: f32, nms_threshold: f32) -> Vec<DetectionData> {
+fn nms_process(
+    bb: &[DetectionData],
+    cls_num: usize,
+    obj_threshold: f32,
+    nms_threshold: f32,
+) -> Vec<DetectionData> {
     let mut cls: Vec<Vec<DetectionData>> = vec![vec![]; cls_num];
     for i in 0..bb.len() {
         if bb[i].confidence > obj_threshold && bb[i].confidence <= 1.0 {
@@ -317,4 +319,45 @@ fn nms_process(bb: &[DetectionData], cls_num: usize, obj_threshold: f32, nms_thr
     new_box
 }
 
+pub fn reverse_transform(
+    width: u32,
+    height: u32,
+    rotate_angle: u32,
+    d_result: &[DetectionData],
+) -> Vec<DetectionData> {
+    let mut result = vec![];
 
+    for d in d_result.iter() {
+        let mut new_d = *d;
+        (new_d.x1, new_d.y1) = point_reverse_transform(width, height, rotate_angle, d.x1, d.y1);
+        (new_d.x2, new_d.y2) = point_reverse_transform(width, height, rotate_angle, d.x2, d.y2);
+        result.push(new_d);
+    }
+    result
+}
+
+fn point_reverse_transform(
+    width: u32,
+    height: u32,
+    rotate_angle: u32,
+    x: f32,
+    y: f32,
+) -> (f32, f32) {
+    let yolo_input_size = 416.;
+
+    let (w, h) = match rotate_angle {
+        90 | 270 => (height, width),
+        _ => (width, height),
+    };
+
+    let wratio = yolo_input_size / w as f32;
+    let hratio = yolo_input_size / h as f32;
+    let ratio = f32::min(wratio, hratio);
+    let nw = f32::max(width as f32 * ratio, 1.);
+    let nh = f32::max(height as f32 * ratio, 1.);
+
+    let pad_w = (nw - yolo_input_size).abs() / 2.;
+    let pad_h = (nh - yolo_input_size).abs() / 2.;
+
+    ((x - pad_w) / ratio, (y - pad_h) / ratio)
+}

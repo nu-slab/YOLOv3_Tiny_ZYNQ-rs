@@ -9,7 +9,7 @@ use v4l::io::{mmap::Stream, traits::CaptureStream};
 use v4l::video::Capture;
 use v4l::{Device, FourCC};
 
-use tiny_yolo_v3_zynq_rs::img_proc::{draw_bbox, letterbox_img};
+use tiny_yolo_v3_zynq_rs::img_proc::draw_bbox;
 use tiny_yolo_v3_zynq_rs::yolo::YoloV3Tiny;
 
 fn main() -> Result<()> {
@@ -38,13 +38,12 @@ fn main() -> Result<()> {
         let t = end.as_secs_f64() * 1000.0;
         println!("Processing time:{:.03}ms, {:.1}FPS", t, 1000. / t);
 
-        let mut lb_img = letterbox_img(&img, 416, 90);
-        draw_bbox(&mut lb_img, &result);
-        lb_img.save(format!("./out/out.png"))?;
+        let mut rgb_img = img.to_rgb8();
+        draw_bbox(&mut rgb_img, &result);
+        rgb_img.save(format!("./out/out.png"))?;
     }
     Ok(())
 }
-
 
 /// カメラ画像を取得するための構造体
 struct CamImgLoader {
@@ -101,22 +100,17 @@ impl CamImgLoader {
         let mut cam_stream = Stream::with_buffers(&mut dev, Type::VideoCapture, 3)?;
 
         loop {
-            let mut tx_en = false;
-            // コマンドの待機 (ここでブロック)
+            let (frame, _meta) = CaptureStream::next(&mut cam_stream)?;
+            let img = image::load_from_memory(frame)?;
+
+            // コマンドの待機
             if let Ok(msg) = cmd_rx.try_recv() {
                 // stopならスレッド終了
                 if msg == "stop" {
                     break;
                 } else {
-                    tx_en = true;
+                    cam_img_tx.send(img)?;
                 }
-            }
-
-            let (frame, _meta) = CaptureStream::next(&mut cam_stream)?;
-
-            if tx_en {
-                let img = image::load_from_memory(frame)?;
-                cam_img_tx.send(img)?;
             }
             thread::yield_now();
         }
