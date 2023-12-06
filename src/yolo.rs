@@ -549,7 +549,7 @@ impl YoloV3Tiny {
         Ok((output10, output13))
     }
 
-    pub fn start(&mut self, img: DynamicImage, rotate_angle: u32) -> Result<Vec<DetectionData>> {
+    pub fn start(&mut self, img: &DynamicImage, rotate_angle: u32) -> Result<Vec<DetectionData>> {
         let img_size = self.layer_groups[0].input_width;
         let input_data = img_proc::letterbox(img, img_size, rotate_angle);
 

@@ -13,15 +13,14 @@ fn main() -> Result<()> {
 
     let start = Instant::now();
 
-    let result = yolo.start(test_img, 0)?;
+    let result = yolo.start(&test_img, 0)?;
 
     let end = start.elapsed();
     let t = end.as_secs_f64() * 1000.0;
     println!("{:?}", result);
     println!("Processing time:{:.03}ms, {:.1}FPS", t, 1000. / t);
 
-    let test_img = image::open("examples/t19.jpg")?;
-    let mut lb_img = letterbox_img(test_img, 416, 0);
+    let mut lb_img = letterbox_img(&test_img, 416, 0);
 
     draw_bbox(&mut lb_img, &result);
     lb_img.save("out.png")?;

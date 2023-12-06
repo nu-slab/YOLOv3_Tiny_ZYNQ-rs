@@ -4,18 +4,18 @@ use image::{DynamicImage, RgbImage, Pixel};
 use crate::thick_xiaolin_wu::draw_line;
 use crate::utils::DetectionData;
 
-pub fn rotate_img(img: DynamicImage, angle: u32) -> DynamicImage {
+pub fn rotate_img(img: &DynamicImage, angle: u32) -> DynamicImage {
     match angle {
         90 => img.rotate90(),
         180 => img.rotate180(),
         270 => img.rotate270(),
-        _ => img,
+        _ => img.clone(),
     }
 }
 
-pub fn letterbox(img: DynamicImage, size: u32, rotate_angle: u32) -> Vec<i16> {
+pub fn letterbox(img: &DynamicImage, size: u32, rotate_angle: u32) -> Vec<i16> {
     let resized = img.resize(size, size, FilterType::Nearest);
-    let rotated = rotate_img(resized, rotate_angle);
+    let rotated = rotate_img(&resized, rotate_angle);
 
     let pad_w = rotated.width().abs_diff(size) / 2;
     let pad_h = rotated.height().abs_diff(size) / 2;
@@ -31,9 +31,9 @@ pub fn letterbox(img: DynamicImage, size: u32, rotate_angle: u32) -> Vec<i16> {
     new_img
 }
 
-pub fn letterbox_img(img: DynamicImage, size: u32, rotate_angle: u32) -> RgbImage {
+pub fn letterbox_img(img: &DynamicImage, size: u32, rotate_angle: u32) -> RgbImage {
     let resized = img.resize(size, size, FilterType::Nearest);
-    let rotated = rotate_img(resized, rotate_angle);
+    let rotated = rotate_img(&resized, rotate_angle);
 
     let pad_w = rotated.width().abs_diff(size) / 2;
     let pad_h = rotated.height().abs_diff(size) / 2;
