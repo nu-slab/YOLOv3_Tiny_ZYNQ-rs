@@ -1,12 +1,12 @@
 use image::imageops::FilterType;
-use image::{DynamicImage, RgbImage, Pixel, Rgb};
+use image::{DynamicImage, Pixel, Rgb, RgbImage};
 
 use crate::thick_xiaolin_wu::draw_line;
 use crate::utils::DetectionData;
 
-use imageproc::rect::Rect;
 use imageproc::drawing::draw_filled_rect_mut;
 use imageproc::drawing::{draw_text_mut, text_size};
+use imageproc::rect::Rect;
 use rusttype::{Font, Scale};
 
 pub fn rotate_img(img: &DynamicImage, angle: u32) -> DynamicImage {
@@ -95,19 +95,16 @@ pub fn draw_bbox(img: &mut image::RgbImage, d_result: &[DetectionData]) {
         };
         let (text_w, text_h) = text_size(scale, &font, &text);
 
-        let rect = Rect::at(dx1, label_y).of_size((text_w + pad*2) as u32, label_h as u32);
+        let rect = Rect::at(dx1, label_y).of_size((text_w + pad * 2) as u32, label_h as u32);
         draw_filled_rect_mut(img, rect, color);
 
         let text_y = label_y + (label_h - text_h) / 2;
-        println!("{} {}", label_h, text_h);
 
-        let text_color =
-            if (color[0] as i32 + color[1] as i32 + color[2] as i32) < 382 {
-                Rgb([255u8, 255, 255])
-            } else {
-                Rgb([0u8, 0, 0])
-            };
+        let text_color = if (color[0] as i32 + color[1] as i32 + color[2] as i32) < 382 {
+            Rgb([255u8, 255, 255])
+        } else {
+            Rgb([0u8, 0, 0])
+        };
         draw_text_mut(img, text_color, dx1 + pad, text_y, scale, &font, &text);
-
     }
 }
