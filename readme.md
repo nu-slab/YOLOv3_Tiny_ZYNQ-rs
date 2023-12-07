@@ -7,7 +7,7 @@
 ## Usage
 
 ```shell
-cargo add --git git@github.com:nu-slab/YOLOv3_Tiny_ZYNQ-rs.git
+cargo add --git https://github.com/nu-slab/YOLOv3_Tiny_ZYNQ-rs.git
 ```
 
 ## Example
