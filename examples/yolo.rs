@@ -20,7 +20,7 @@ fn main() -> Result<()> {
     println!("Processing time:{:.03}ms, {:.1}FPS", t, 1000. / t);
 
     let mut rgb_img = test_img.to_rgb8();
-    draw_bbox(&mut rgb_img, &result);
+    draw_bbox(&mut rgb_img, &result, 20., 6.);
 
     std::fs::create_dir_all("./out")?;
     rgb_img.save("./out/out.png")?;

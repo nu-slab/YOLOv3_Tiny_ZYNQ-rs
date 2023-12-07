@@ -1,7 +1,6 @@
 use image::imageops::FilterType;
 use image::{DynamicImage, Pixel, Rgb, RgbImage};
 
-use crate::thick_xiaolin_wu::draw_line;
 use crate::detection_result::DetectionData;
 
 use imageproc::drawing::draw_filled_rect_mut;
@@ -63,48 +62,75 @@ const COLORS: [[u8; 3]; 10] = [
     [115, 11, 87],
 ];
 
-fn draw_rect(img: &mut image::RgbImage, x1: f32, y1: f32, x2: f32, y2: f32, color: image::Rgb<u8>) {
-    let thickness = 3.;
+fn draw_line(
+    img: &mut image::RgbImage,
+    x1: f32,
+    y1: f32,
+    x2: f32,
+    y2: f32,
+    thickness: f32,
+    color: image::Rgb<u8>,
+) {
+    let (bx, by) = (x1 - (thickness / 2.).floor(), y1 - (thickness / 2.).floor());
+
+    let (w, h) = if x1 == x2 {
+        (thickness, (y2 - y1).abs() + thickness)
+    } else {
+        ((x2 - x1).abs() + thickness, thickness)
+    };
+
+    let rect =
+        Rect::at(bx as i32, by as i32).of_size(w as u32,h as u32);
+    draw_filled_rect_mut(img, rect, color);
+}
+
+fn draw_rect(img: &mut image::RgbImage, x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, color: image::Rgb<u8>) {
     draw_line(img, x1, y1, x1, y2, thickness, color);
     draw_line(img, x1, y2, x2, y2, thickness, color);
     draw_line(img, x1, y1, x2, y1, thickness, color);
     draw_line(img, x2, y1, x2, y2, thickness, color);
 }
 
-pub fn draw_bbox(img: &mut image::RgbImage, d_result: &[DetectionData]) {
-    let label_h = (img.height() * 10 / 450) as i32;
+fn draw_label(img: &mut image::RgbImage, x1: f32, y1: f32, line_thickness: f32, bg_color: image::Rgb<u8>, font: &Font, font_size: f32, text: &str) {
+    let label_h = font_size;
+    let dx1 = x1 - (line_thickness / 2.).floor();
+    let label_y = y1 - label_h;
 
+    let pad = 6.;
+    let scale = Scale::uniform(label_h);
+    let (text_w, _) = text_size(scale, &font, &text);
+    let v_metrics = font.v_metrics(scale);
+    let text_h = v_metrics.ascent - v_metrics.descent + v_metrics.line_gap;
+
+    let rect = Rect::at(dx1 as i32, label_y as i32).of_size((text_w as f32 + pad * 2.) as u32, label_h as u32);
+    draw_filled_rect_mut(img, rect, bg_color);
+
+    let text_y = label_y + (label_h - text_h) / 2.;
+
+    let text_color = if (bg_color[0] as i32 + bg_color[1] as i32 + bg_color[2] as i32) < 382 {
+        Rgb([255u8, 255, 255])
+    } else {
+        Rgb([0u8, 0, 0])
+    };
+    draw_text_mut(img, text_color, (dx1 + pad) as i32, text_y as i32 , scale, &font, &text);
+}
+
+pub fn draw_bbox(img: &mut image::RgbImage, d_result: &[DetectionData], font_size: f32, line_thickness: f32) {
     let font = Vec::from(include_bytes!("RobotoMono.ttf") as &[u8]);
     let font = Font::try_from_vec(font).unwrap();
 
     for d in d_result.iter() {
         let color: image::Rgb<u8> = *image::Rgb::from_slice(&COLORS[d.class as usize]);
-        draw_rect(img, d.x1, d.y1, d.x2, d.y2, color);
 
-        let dx1 = d.x1 as i32;
-        let dy1 = d.y1 as i32;
-        let label_y = dy1 - label_h;
+        let x1 = d.x1.round();
+        let y1 = d.y1.round();
+        let x2 = d.x2.round();
+        let y2 = d.y2.round();
+
+        draw_rect(img, x1, y1, x2, y2, line_thickness, color);
 
         let text = format!("{}: {:.2}", d.class, d.confidence);
+        draw_label(img, x1, y1, line_thickness, color, &font, font_size, &text);
 
-        let pad = 5;
-        let height = (label_h + 1) as f32;
-        let scale = Scale {
-            x: height * 1.3,
-            y: height,
-        };
-        let (text_w, text_h) = text_size(scale, &font, &text);
-
-        let rect = Rect::at(dx1, label_y).of_size((text_w + pad * 2) as u32, label_h as u32);
-        draw_filled_rect_mut(img, rect, color);
-
-        let text_y = label_y + (label_h - text_h) / 2;
-
-        let text_color = if (color[0] as i32 + color[1] as i32 + color[2] as i32) < 382 {
-            Rgb([255u8, 255, 255])
-        } else {
-            Rgb([0u8, 0, 0])
-        };
-        draw_text_mut(img, text_color, dx1 + pad, text_y, scale, &font, &text);
     }
 }

@@ -39,7 +39,7 @@ fn main() -> Result<()> {
         println!("Processing time:{:.03}ms, {:.1}FPS", t, 1000. / t);
 
         let mut rgb_img = img.rotate90().to_rgb8();
-        draw_bbox(&mut rgb_img, &result);
+        draw_bbox(&mut rgb_img, &result, 20., 4.);
         rgb_img.save(format!("./out/out.png"))?;
     }
     Ok(())
