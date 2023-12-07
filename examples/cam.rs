@@ -107,7 +107,6 @@ impl CamImgLoader {
 
         loop {
             let (frame, _meta) = CaptureStream::next(&mut cam_stream)?;
-            let img = image::load_from_memory(frame)?;
 
             // コマンドの待機
             if let Ok(msg) = cmd_rx.try_recv() {
@@ -115,6 +114,7 @@ impl CamImgLoader {
                 if msg == "stop" {
                     break;
                 } else {
+                    let img = image::load_from_memory(frame)?;
                     cam_img_tx.send(img)?;
                 }
             }
