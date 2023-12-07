@@ -353,11 +353,11 @@ fn point_reverse_transform(
     let wratio = yolo_input_size / w as f32;
     let hratio = yolo_input_size / h as f32;
     let ratio = f32::min(wratio, hratio);
-    let nw = f32::max(width as f32 * ratio, 1.);
-    let nh = f32::max(height as f32 * ratio, 1.);
+    let nw = w as f32 * ratio;
+    let nh = h as f32 * ratio;
 
-    let pad_w = (nw - yolo_input_size).abs() / 2.;
-    let pad_h = (nh - yolo_input_size).abs() / 2.;
+    let pad_w = (yolo_input_size - nw) / 2.;
+    let pad_h = (yolo_input_size - nh) / 2.;
 
     ((x - pad_w) / ratio, (y - pad_h) / ratio)
 }
