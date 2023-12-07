@@ -1,8 +1,8 @@
 use anyhow::Result;
 use std::time::Instant;
 
-use tiny_yolo_v3_zynq_rs::img_proc::draw_bbox;
-use tiny_yolo_v3_zynq_rs::yolov3_tiny::YoloV3Tiny;
+use yolo_v3_tiny_zynq::img_proc::draw_bbox;
+use yolo_v3_tiny_zynq::yolov3_tiny::YoloV3Tiny;
 
 fn main() -> Result<()> {
     let wdir = "examples/weights";

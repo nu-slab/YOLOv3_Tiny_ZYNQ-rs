@@ -1,5 +1,5 @@
 [package]
-name = "tiny_yolo_v3_zynq-rs"
+name = "yolo_v3_tiny_zynq"
 version = "0.1.0"
 edition = "2021"
 
