@@ -1,6 +1,14 @@
 
 use crate::detection_result::DetectionData;
 
+/// 2つの検出データ間のIoU（Intersection over Union）を計算します。
+///
+/// # Args
+/// * `a` - 検出データ1
+/// * `b` - 検出データ2
+///
+/// # Return
+/// * IoUの値（0.0から1.0の範囲）
 fn iou(a: &DetectionData, b: &DetectionData) -> f32 {
     let (x1, x2) = if a.x1 < b.x1 {
         (b.x1, a.x1)
@@ -38,6 +46,14 @@ fn iou(a: &DetectionData, b: &DetectionData) -> f32 {
     area1 as f32 / area2 as f32
 }
 
+/// Non-Maximum Suppression (NMS)を適用して、重複した検出を削除します。
+///
+/// # Args
+/// * `bb` - 検出データの配列
+/// * `nms_threshold` - NMSの閾値
+///
+/// # Return
+/// * NMSを適用した後の検出データの配列
 fn nms(bb: &[DetectionData], nms_threshold: f32) -> Vec<DetectionData> {
     let mut sorted_bb = bb.to_vec();
     sorted_bb.sort_by(|a, b| (-a.confidence).partial_cmp(&(-b.confidence)).unwrap());
@@ -55,6 +71,16 @@ fn nms(bb: &[DetectionData], nms_threshold: f32) -> Vec<DetectionData> {
     sorted_bb
 }
 
+/// 検出データをクラスごとに分割し、各クラスにNMSを適用します。
+///
+/// # Args
+/// * `bb` - 検出データの配列
+/// * `cls_num` - クラスの数
+/// * `obj_threshold` - オブジェクト検出の閾値
+/// * `nms_threshold` - NMSの閾値
+///
+/// # Return
+/// * NMSを適用した後の検出データの配列
 pub fn nms_process(
     bb: &[DetectionData],
     cls_num: usize,

@@ -1,12 +1,29 @@
+//! YOLO (You Only Look Once) 物体検出アルゴリズムの出力を後処理するためのモジュール
+
 use crate::detection_result::DetectionData;
 use crate::nms::nms_process;
 
 const ANCHOR_BOX_NUM: usize = 3;
 
+/// `fix2float`関数は、符号あり[8bits].[8bits]の固定小数点数をf32型の浮動小数点数に変換します
+///
+/// # Args
+/// * `input` - f32型に変換するi16型の固定小数点数
+///
+/// # Return
+/// * 入力値を2の8乗で除算したf32型の浮動小数点数
 fn fix2float(input: i16) -> f32 {
     input as f32 / 2f32.powi(8)
 }
 
+/// ch_reorder関数は、与えられた配列を再配置します
+///
+/// # Args
+/// * `arr` - 再配置するf32型の配列
+/// * `grid_num` - グリッドの数（配列の再配置に使用）
+///
+/// # Return
+/// * 再配置されたf32型のベクトル
 fn ch_reorder(arr: &[f32], grid_num: usize) -> Vec<f32> {
     let mut reorder: Vec<f32> = vec![];
     for i in 0..grid_num * grid_num {
@@ -19,6 +36,15 @@ fn ch_reorder(arr: &[f32], grid_num: usize) -> Vec<f32> {
     reorder
 }
 
+/// `ch_reshape`関数は、与えられた配列を再形成します
+///
+/// # Args
+/// * `reorder_arr` - 再形成するf32型の配列
+/// * `grid_num` - グリッドの数（配列の再形成に使用）
+/// * `cls_num` - クラスの数（配列の再形成に使用）
+///
+/// # Return
+/// * 再形成された2つのf32型のベクトル (reshape, class)
 fn ch_reshape(reorder_arr: &[f32], grid_num: usize, cls_num: usize) -> (Vec<f32>, Vec<f32>) {
     let mut reshape = vec![0.; grid_num * grid_num * 18];
     let mut class = vec![0.; grid_num * grid_num * ANCHOR_BOX_NUM * cls_num];
@@ -42,6 +68,12 @@ fn ch_reshape(reorder_arr: &[f32], grid_num: usize, cls_num: usize) -> (Vec<f32>
     (reshape, class)
 }
 
+/// get_anchor_box関数は、アンカーボックスの値を計算します
+///
+/// # Args
+/// * `reshape` - アンカーボックスの値を計算するためのf32型のベクトル
+/// * `grid_num` - グリッドの数（アンカーボックスの計算に使用）
+/// * `anchor_box` - アンカーボックスの初期値
 fn get_anchor_box(reshape: &mut Vec<f32>, grid_num: usize, anchor_box: [[f32; 2]; 3]) {
     let grid_width = 416.0 / grid_num as f32;
     let mut w_cnt = 0.;
@@ -62,6 +94,15 @@ fn get_anchor_box(reshape: &mut Vec<f32>, grid_num: usize, anchor_box: [[f32; 2]
     }
 }
 
+/// `get_cls_id`関数は、クラスIDを取得します
+///
+/// # Args
+/// * `cls_concat` - クラスIDを取得するためのf32型の配列
+/// * `idx` - クラスIDを取得するためのインデックス
+/// * `cls_num` - クラスの数
+///
+/// # Return
+/// * 最大の値を持つ要素のクラスID
 fn get_cls_id(cls_concat: &[f32], idx: usize, cls_num: usize) -> u8 {
     let ccnt = idx * cls_num;
     ((ccnt..ccnt + cls_num)
@@ -70,6 +111,15 @@ fn get_cls_id(cls_concat: &[f32], idx: usize, cls_num: usize) -> u8 {
         - ccnt) as u8
 }
 
+/// get_objs関数は、物体を検出します
+///
+/// # Args
+/// * grid_concat - 物体検出を行うためのf32型の配列
+/// * cls_concat - 物体検出を行うためのf32型の配列
+/// * cls_num - クラスの数
+///
+/// # Return
+/// * 検出された物体を表すDetectionDataのベクトル
 fn get_objs(grid_concat: &[f32], cls_concat: &[f32], cls_num: usize) -> Vec<DetectionData> {
     grid_concat[..(13 * 13 + 26 * 26) * 18]
         .chunks(18 / ANCHOR_BOX_NUM)
@@ -80,6 +130,20 @@ fn get_objs(grid_concat: &[f32], cls_concat: &[f32], cls_num: usize) -> Vec<Dete
         .collect()
 }
 
+/// `post_process`関数は、YOLOの出力から物体検出を行います
+///
+/// # Args
+/// * `yolo_out_0` - YOLOの出力
+/// * `yolo_out_1` - YOLOの別の出力
+/// * `cls_num` - クラスの数
+/// * `obj_threshold` - 物体検出の閾値
+/// * `nms_threshold` - 非最大抑制（NMS）の閾値
+///
+/// # Return
+/// * 検出された物体を表すDetectionDataのベクトル
+///
+/// このベクトルは、物体検出の結果を表すデータ構造を含みます
+/// 各DetectionDataは、検出された物体のクラスID、信頼度スコア、およびバウンディングボックスの座標を含みます
 pub fn post_process(
     yolo_out_0: &[i16],
     yolo_out_1: &[i16],

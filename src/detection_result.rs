@@ -1,3 +1,5 @@
+//! 物体検出の結果を処理するモジュール
+
 use anyhow::{anyhow, Result};
 
 /// 送られてきた生の検出結果を保持するための構造体
@@ -18,6 +20,15 @@ pub struct DetectionData {
 }
 
 impl DetectionData {
+    /// YOLOの結果から新しいDetectionDataを作成します。
+    ///
+    /// # Args
+    ///
+    /// * `yolo_result` - YOLOの結果の配列
+    /// * `cls_id` - クラスID
+    ///
+    /// # Return
+    /// * 新たなDetectionDataインスタンス
     pub fn new_from_yolo(yolo_result: &[f32], cls_id: u8) -> Result<Self> {
         // 中心座標
         let cx = yolo_result[0];
@@ -46,6 +57,16 @@ impl DetectionData {
         }
     }
 
+    /// YOLOの出力した検出結果の座標を元の画像の座標系に戻します。
+    ///
+    /// # Args
+    ///
+    /// * `width` - 画像の幅
+    /// * `height` - 画像の高さ
+    /// * `rotate_angle` - 回転角度
+    ///
+    /// # Return
+    /// * 新たなDetectionDataインスタンス
     pub fn reverse_transform(&self, width: u32, height: u32, rotate_angle: u32) -> Self {
         let mut new_d = *self;
         (new_d.x1, new_d.y1) =
@@ -56,6 +77,19 @@ impl DetectionData {
     }
 }
 
+
+    /// YOLOの出力した座標を元の画像の座標系に戻します。
+    ///
+    /// # Args
+    ///
+    /// * `width` - 画像の幅
+    /// * `height` - 画像の高さ
+    /// * `rotate_angle` - 回転角度
+    /// * `x` - x座標
+    /// * `y` - y座標
+    ///
+    /// # Return
+    /// * 新たな座標 (x, y)
 fn point_reverse_transform(
     width: u32,
     height: u32,

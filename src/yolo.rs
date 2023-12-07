@@ -1,3 +1,5 @@
+//! YOLOのモデルをコントロールするモジュール
+
 use std::{ffi::OsStr, io::Read, path::Path, vec};
 
 use anyhow::{anyhow, Context, Result};
@@ -6,6 +8,16 @@ use log::info;
 use xipdriver_rs::{axidma, axis_switch, json_as_map, json_as_str, yolo};
 
 use crate::layer_group::{Activation, LayerGroup, PostProcess};
+
+/// ハードウェア名を取得します。
+///
+/// # Args
+/// * `hw_json` - ハードウェア情報が含まれるJSON
+/// * `hier_name` - 階層名
+/// * `hw_name` - ハードウェア名
+///
+/// # 返り値
+/// * ハードウェアの完全な名前を含むResult。ハードウェアが見つからない場合はエラー
 
 pub fn match_hw(hw_json: &serde_json::Value, hier_name: &str, hw_name: &str) -> Result<String> {
     let hw_object = json_as_map!(hw_json);
@@ -26,21 +38,39 @@ const ACTIVE_EN: [u32; 8] = [
 
 /// YOLOのモデルをコントロールする構造体
 pub struct YoloController {
+    /// AxisSwitchのインスタンス0
     sw0: axis_switch::AxisSwitch,
+    /// AxisSwitchのインスタンス1
     sw1: axis_switch::AxisSwitch,
+    /// AxisSwitchのインスタンス2
     sw2: axis_switch::AxisSwitch,
+    /// AxiDmaのインスタンス0
     dma0: axidma::AxiDma,
+    /// AxiDmaのインスタンス1
     dma1: axidma::AxiDma,
+    /// YOLOアクセラレータのインスタンス
     yolo_acc: yolo::Yolo,
+    /// YOLO畳み込み層のインスタンス
     yolo_conv: yolo::Yolo,
+    /// YOLO最大プーリング層のインスタンス
     yolo_mp: yolo::Yolo,
+    /// YOLO層のインスタンス
     yolo_yolo: yolo::Yolo,
+    /// YOLOアップサンプリング層のインスタンス
     yolo_upsamp: yolo::Yolo,
+    /// レイヤーグループのベクトル
     pub(crate) layer_groups: Vec<LayerGroup>,
 }
 
 impl YoloController {
-    /// コンストラクタ
+    /// 新たな `YoloController` のインスタンスを作成します。
+    ///
+    /// # Args
+    /// * `hwinfo_path` - ハードウェア情報のパス
+    /// * `yolo_hier` - YOLOの階層名
+    ///
+    /// # 返り値
+    /// * 新たな `YoloController` のインスタンス
     pub fn new(
         hwinfo_path: &str,
         yolo_hier: &str,
@@ -105,6 +135,10 @@ impl YoloController {
         })
     }
 
+    /// YOLOの畳み込み層の設定を行います。
+    ///
+    /// # Args
+    /// * `grp_idx` - レイヤーグループのインデックス
     fn set_yolo_conv(&self, grp_idx: usize) {
         let l = &self.layer_groups[grp_idx];
         self.set_yolo_conv_internal(
@@ -140,6 +174,11 @@ impl YoloController {
         self.yolo_conv.set("FOLD_WIN_AREA", fold_win_area);
     }
 
+    /// YOLOの最大プーリング層の設定を行います。
+    ///
+    /// # Args
+    /// * `grp_idx` - レイヤーグループのインデックス
+    /// * `add_val` - 追加値
     fn set_yolo_max_pool(&self, grp_idx: usize, add_val: u32) {
         let l = &self.layer_groups[grp_idx];
         self.set_yolo_max_pool_internal(
@@ -169,11 +208,23 @@ impl YoloController {
         self.yolo_mp.set("STRIDE", stride);
     }
 
+    /// YOLOのYOLO層の設定を行います。
+    ///
+    /// # Args
+    /// * `active_en` - アクティブ化関数の有効化フラグ
+    /// * `input_h` - 入力の高さ
+    /// * `input_w` - 入力の幅
     fn set_yolo_yolo(&self, active_en: u32, input_h: u32, input_w: u32) {
         self.yolo_yolo.set("ACTIVATE_EN", active_en);
         self.yolo_yolo.set("INPUT_H", input_h);
         self.yolo_yolo.set("INPUT_W", input_w);
     }
+
+    /// YOLOのアキュムレータ層の設定を行います。
+    ///
+    /// # Args
+    /// * `grp_idx` - レイヤーグループのインデックス
+    /// * `bias_en` - バイアスの有効化フラグ
     fn set_yolo_acc(&self, grp_idx: usize, bias_en: bool) {
         let l = &self.layer_groups[grp_idx];
 
@@ -207,6 +258,11 @@ impl YoloController {
         self.yolo_acc.set("BIAS_EN", bias_en);
     }
 
+    /// Axi4-Stream Switchの設定を行います。
+    ///
+    /// # Args
+    /// * `conv_disable` - 畳み込みの無効化フラグ
+    /// * `post_process_type` - ポストプロセスのタイプ
     fn set_axis_switch(&self, conv_disable: bool, post_process_type: PostProcess) {
         let conv_disable_bool = if conv_disable { 1 } else { 0 };
         let post_process_u8 = post_process_type as u8;
@@ -246,6 +302,10 @@ impl YoloController {
         self.sw2.reg_update_enable();
     }
 
+    /// 全てのIPをスタートします。
+    ///
+    /// # Args
+    /// * `grp_idx` - レイヤーグループのインデックス
     fn start_all_ips(&self, grp_idx: usize) {
         let l = &self.layer_groups[grp_idx];
         // IPの動作をスタートさせる (まだデータは送ってないので処理はしてない)
@@ -264,6 +324,11 @@ impl YoloController {
         }
     }
 
+    /// 全てのIPの設定を行います。
+    ///
+    /// # Args
+    /// * `grp_idx` - レイヤーグループのインデックス
+    /// * `i` - インデックス
     fn configure_all_ips(&self, grp_idx: usize, i: u32) {
         let l = &self.layer_groups[grp_idx];
         if !l.conv_disable {
@@ -284,6 +349,10 @@ impl YoloController {
         self.start_all_ips(grp_idx);
     }
 
+    /// 畳み込みとアキュムレータIPの設定を行います。
+    ///
+    /// # Args
+    /// * `grp_idx` - レイヤーグループのインデックス
     fn configure_conv_and_acc_ips(&self, grp_idx: usize) {
         self.set_yolo_conv(grp_idx);
         self.set_yolo_acc(grp_idx, false);
@@ -292,6 +361,15 @@ impl YoloController {
         self.yolo_acc.start();
     }
 
+    /// 重みを転送します。
+    ///
+    /// # Args
+    /// * `grp_idx` - レイヤーグループのインデックス
+    /// * `off` - オフセット
+    /// * `iff` - インデックス
+    ///
+    /// # 返り値
+    /// * Result。転送に失敗した場合はエラー
     fn transfer_weights(&mut self, grp_idx: usize, off: u32, iff: u32) -> Result<()> {
         // キャッシュは無効なので，Flushはしなくていい (はず)
         let weights = self.layer_groups[grp_idx].get_weights(off, iff)?;
@@ -300,6 +378,14 @@ impl YoloController {
         Ok(())
     }
 
+    /// バイアスを転送します。
+    ///
+    /// # Args
+    /// * `grp_idx` - レイヤーグループのインデックス
+    /// * `off` - オフセット
+    ///
+    /// # 返り値
+    /// * Result。転送に失敗した場合はエラー
     fn transfer_biases(&mut self, grp_idx: usize, off: u32) -> Result<()> {
         let biases = self.layer_groups[grp_idx].get_biases(off)?;
         self.dma1.write(biases)?;
@@ -307,25 +393,63 @@ impl YoloController {
         Ok(())
     }
 
+    /// アキュムレータの入力を転送します。
+    ///
+    /// # Args
+    /// * `acc_input_buff` - アキュムレータの入力バッファ
+    ///
+    /// # 返り値
+    /// * Result。転送に失敗した場合はエラー
     fn transfer_acc_input(&mut self, acc_input_buff: &[i16]) -> Result<()> {
         self.dma1.write(acc_input_buff)
     }
 
+    /// アキュムレータの出力を転送します。
+    ///
+    /// # Args
+    /// * `grp_idx` - レイヤーグループのインデックス
+    ///
+    /// # 返り値
+    /// * アキュムレータの出力を含むVec<i16>のResult。転送に失敗した場合はエラー
     fn transfer_acc_output(&mut self, grp_idx: usize) -> Result<Vec<i16>> {
         self.dma0.read(self.layer_groups[grp_idx].acc_size as usize)
     }
 
+    /// 出力を転送します。
+    ///
+    /// # Args
+    /// * `grp_idx` - レイヤーグループのインデックス
+    ///
+    /// # 返り値
+    /// * 出力を含むVec<i16>のResult。転送に失敗した場合はエラー
     fn transfer_output(&mut self, grp_idx: usize) -> Result<Vec<i16>> {
         self.dma0
             .read(self.layer_groups[grp_idx].output_size as usize)
     }
 
+    /// 入力を転送します。
+    ///
+    /// # Args
+    /// * `grp_idx` - レイヤーグループのインデックス
+    /// * `idx` - インデックス
+    ///
+    /// # 返り値
+    /// * Result。転送に失敗した場合はエラー
     fn transfer_inputs(&mut self, grp_idx: usize, idx: u32) -> Result<()> {
         let inputs = self.layer_groups[grp_idx].get_inputs(idx)?;
         self.dma0.write(inputs)?;
         Ok(())
     }
-
+    /// 最後のチャネルデータを転送します。
+    ///
+    /// # Args
+    /// * `grp_idx` - レイヤーグループのインデックス
+    /// * `off` - オフセット
+    /// * `iff` - インデックス
+    /// * `acc_input_buff` - アキュムレータの入力バッファ
+    ///
+    /// # 返り値
+    /// * Result。転送に失敗した場合はエラー
     fn transfer_last_channel_data(
         &mut self,
         grp_idx: usize,
@@ -350,6 +474,16 @@ impl YoloController {
         Ok(())
     }
 
+    /// サブチャネルデータを転送します。
+    ///
+    /// # Args
+    /// * `grp_idx` - レイヤーグループのインデックス
+    /// * `iff` - インデックス
+    /// * `acc_input_buff` - アキュムレータの入力バッファ
+    /// * `acc_output_buff` - アキュムレータの出力バッファ
+    ///
+    /// # 返り値
+    /// * Result。転送に失敗した場合はエラー
     fn transfer_subchannel_data(
         &mut self,
         grp_idx: usize,
@@ -365,6 +499,10 @@ impl YoloController {
         Ok(())
     }
 
+    /// 全てのIPが完了するまで待ちます。
+    ///
+    /// # Args
+    /// * `grp_idx` - レイヤーグループのインデックス
     fn wait_ips(&self, grp_idx: usize) {
         let l = &self.layer_groups[grp_idx];
         if l.post_process_type == PostProcess::None {
@@ -381,11 +519,19 @@ impl YoloController {
         }
     }
 
+    /// アキュムレータIPが完了するまで待ちます。
     fn wait_acc_ip(&self) {
         while !self.yolo_acc.is_done() {}
     }
 
-    pub fn forward_layer_group(&mut self, grp_idx: usize) -> Result<()> {
+    /// レイヤーグループの処理を開始します。
+    ///
+    /// # Args
+    /// * `grp_idx` - 処理を開始するレイヤーグループのインデックス
+    ///
+    /// # 返り値
+    /// * Result。処理に失敗した場合はエラー
+    pub fn start_layer_processing(&mut self, grp_idx: usize) -> Result<()> {
         for off in 0..self.layer_groups[grp_idx].output_fold_factor {
             let mut acc_output_buff = vec![0i16; self.layer_groups[grp_idx].acc_size as usize];
             let mut acc_input_buff = vec![0i16; self.layer_groups[grp_idx].acc_size as usize];
@@ -427,6 +573,14 @@ impl YoloController {
         Ok(())
     }
 
+    /// 重みデータを読み込みます。
+    ///
+    /// # Args
+    /// * `weights_dir` - 重みデータが格納されているディレクトリへのパス
+    ///
+    /// # 注意
+    /// この関数は各レイヤーグループの重みデータを読み込みます。データは16ビット整数として解釈されます。
+    /// ファイルが存在しない場合、そのレイヤーグループの重みは更新されません。
     pub fn read_weights<S: AsRef<OsStr> + ?Sized>(&mut self, weights_dir: &S) {
         for (i, l) in self.layer_groups.iter_mut().enumerate() {
             let path = Path::new(weights_dir).join(format!("weights{}", i));
@@ -445,6 +599,14 @@ impl YoloController {
         }
     }
 
+    /// バイアスデータを読み込みます。
+    ///
+    /// # Args
+    /// * `biases_dir` - バイアスデータが格納されているディレクトリへのパス
+    ///
+    /// # 注意
+    /// この関数は各レイヤーグループのバイアスデータを読み込みます。データは16ビット整数として解釈されます。
+    /// ファイルが存在しない場合、そのレイヤーグループのバイアスは更新されません。
     pub fn read_biases<S: AsRef<OsStr> + ?Sized>(&mut self, biases_dir: &S) {
         for (i, l) in self.layer_groups.iter_mut().enumerate() {
             let path = Path::new(biases_dir).join(format!("biases{}", i));
@@ -463,6 +625,7 @@ impl YoloController {
         }
     }
 
+    /// DMAを停止します
     pub fn stop_dmas(&self) {
         self.dma0.stop();
         self.dma1.stop();

@@ -31,15 +31,21 @@ fn main() -> Result<()> {
 
     for _ in 0..10 {
         let start = Instant::now();
+
+        // カメラ画像を読み込む
         let img = loader.receive()?;
+        // YOLOの処理を開始
         let result = yolo.start(&img, 90)?;
 
         let end = start.elapsed();
         let t = end.as_secs_f64() * 1000.0;
         println!("Processing time:{:.03}ms, {:.1}FPS", t, 1000. / t);
 
+        // BBox描画のためDynamicImageを回転してRGB画像に変換
         let mut rgb_img = img.rotate90().to_rgb8();
         draw_bbox(&mut rgb_img, &result, 20., 4.);
+
+        // 画像を保存
         rgb_img.save(format!("./out/out.png"))?;
     }
     Ok(())

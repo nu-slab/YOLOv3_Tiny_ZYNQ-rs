@@ -1,3 +1,5 @@
+//! YOLOv3-Tiny のモデルをコントロールするモジュール
+
 use std::ffi::OsStr;
 
 use anyhow::{bail, Context, Result};
@@ -18,7 +20,19 @@ pub struct YoloV3Tiny {
 }
 
 impl YoloV3Tiny {
-    /// コンストラクタ
+    /// 新しい `YoloV3Tiny` インスタンスを作成します。
+    ///
+    /// # Args
+    /// * `hwinfo_path` - HW情報のパス
+    /// * `yolo_hier` - YOLO階層のパス
+    /// * `cls_num` - クラス数
+    /// * `obj_threshold` - オブジェクトの閾値
+    /// * `nms_threshold` - NMSの閾値
+    /// * `weights_dir` - 重みのディレクトリ
+    /// * `biases_dir` - バイアスのディレクトリ
+    ///
+    /// # Return
+    /// * 新たな `YoloV3Tiny` インスタンス
     pub fn new<S: AsRef<OsStr> + ?Sized>(
         hwinfo_path: &str,
         yolo_hier: &str,
@@ -39,6 +53,11 @@ impl YoloV3Tiny {
         Ok(s)
     }
 
+    /// YOLOv3-Tiny モデルを初期化します。
+    ///
+    /// # Args
+    /// * `weights_dir` - 重みのディレクトリ
+    /// * `biases_dir` - バイアスのディレクトリ
     #[rustfmt::skip]
     pub fn init<S: AsRef<OsStr> + ?Sized>(&mut self, weights_dir: &S, biases_dir: &S) {
         self.yc.layer_groups.push(LayerGroup::new(416, 416,  3,  1, 208, 208, 16,  1, false,  Activation::Leaky,  PostProcess::MaxPool, 2));
@@ -60,11 +79,18 @@ impl YoloV3Tiny {
         self.yc.read_biases(biases_dir);
     }
 
+    /// 入力データの処理を開始します。
+    ///
+    /// # Args
+    /// * `input_data` - 入力データ
+    ///
+    /// # Return
+    /// * YOLOの出力 (scale1, scale2)
     pub fn start_processing(&mut self, input_data: &[i16]) -> Result<(Vec<i16>, Vec<i16>)> {
         self.yc.layer_groups[0].inputs = Some(Vec::from(input_data));
 
         for grp_idx in 0..=13 {
-            self.yc.forward_layer_group(grp_idx)?;
+            self.yc.start_layer_processing(grp_idx)?;
 
             if grp_idx == 4 || grp_idx == 8 {
                 // あとで使うため，cloneする
@@ -107,6 +133,14 @@ impl YoloV3Tiny {
         Ok((output10, output13))
     }
 
+    /// 画像の処理を開始します。
+    ///
+    /// # Args
+    /// * `img` - 入力画像
+    /// * `rotate_angle` - 回転角度
+    ///
+    /// # Return
+    /// * 物体検出結果
     pub fn start(&mut self, img: &DynamicImage, rotate_angle: u32) -> Result<Vec<DetectionData>> {
         let img_size = self.yc.layer_groups[0].input_width;
         let input_data = img_proc::letterbox(img, img_size, rotate_angle);
