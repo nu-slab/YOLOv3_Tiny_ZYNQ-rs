@@ -2,35 +2,11 @@
 
 use std::{ffi::OsStr, io::Read, path::Path, vec};
 
-use anyhow::{anyhow, Context, Result};
-use log::info;
+use anyhow::Result;
 
-use xipdriver_rs::{axidma, axis_switch, json_as_map, json_as_str, yolo};
+use xipdriver_rs::{axidma, axis_switch, yolo};
 
 use crate::layer_group::{Activation, LayerGroup, PostProcess};
-
-/// ハードウェア名を取得します。
-///
-/// # Args
-/// * `hw_json` - ハードウェア情報が含まれるJSON
-/// * `hier_name` - 階層名
-/// * `hw_name` - ハードウェア名
-///
-/// # 返り値
-/// * ハードウェアの完全な名前を含むResult。ハードウェアが見つからない場合はエラー
-
-pub fn match_hw(hw_json: &serde_json::Value, hier_name: &str, hw_name: &str) -> Result<String> {
-    let hw_object = json_as_map!(hw_json);
-    let full_name = format!("/{}/{}", hier_name, hw_name);
-    for k in hw_object.keys() {
-        if let Some(_) = k.find(hier_name) {
-            if json_as_str!(hw_object[k]["fullname"]) == full_name {
-                return Ok(k.clone());
-            }
-        }
-    }
-    Err(anyhow!("hw object not found: {}, {}", hier_name, hw_name))
-}
 
 const ACTIVE_EN: [u32; 8] = [
     0xfffffff3, 0xffffffff, 0xfe7fffff, 0xffffffff, 0xffffffff, 0xffffcfff, 0xffffffff, 0x7fffffff,
@@ -71,37 +47,23 @@ impl YoloController {
     ///
     /// # 返り値
     /// * 新たな `YoloController` のインスタンス
-    pub fn new(
-        hwinfo_path: &str,
-        yolo_hier: &str,
-    ) -> Result<Self> {
+    pub fn new(hwinfo_path: &str, yolo_hier: &str) -> Result<Self> {
         // ハードウェア情報の読み込み
         let hw_json = xipdriver_rs::hwinfo::read(hwinfo_path)?;
 
         // ハードウェア名を取得
-        let sw0_name = match_hw(&hw_json, yolo_hier, "axis_switch_0")?;
-        let sw1_name = match_hw(&hw_json, yolo_hier, "axis_switch_1")?;
-        let sw2_name = match_hw(&hw_json, yolo_hier, "axis_switch_2")?;
+        let sw0_name = format!("/{}/{}", yolo_hier, "axis_switch_0");
+        let sw1_name = format!("/{}/{}", yolo_hier, "axis_switch_1");
+        let sw2_name = format!("/{}/{}", yolo_hier, "axis_switch_2");
 
-        let dma0_name = match_hw(&hw_json, yolo_hier, "axi_dma_0")?;
-        let dma1_name = match_hw(&hw_json, yolo_hier, "axi_dma_1")?;
+        let dma0_name = format!("/{}/{}", yolo_hier, "axi_dma_0");
+        let dma1_name = format!("/{}/{}", yolo_hier, "axi_dma_1");
 
-        let yolo_acc_name = match_hw(&hw_json, yolo_hier, "yolo_acc_top_0")?;
-        let yolo_conv_name = match_hw(&hw_json, yolo_hier, "yolo_conv_top_0")?;
-        let yolo_mp_name = match_hw(&hw_json, yolo_hier, "yolo_max_pool_top_0")?;
-        let yolo_yolo_name = match_hw(&hw_json, yolo_hier, "yolo_yolo_top_0")?;
-        let yolo_upsamp_name = match_hw(&hw_json, yolo_hier, "yolo_upsamp_top_0")?;
-
-        info!("sw0_name: {}", sw0_name);
-        info!("sw1_name: {}", sw1_name);
-        info!("sw2_name: {}", sw2_name);
-        info!("dma0_name: {}", dma0_name);
-        info!("dma1_name: {}", dma1_name);
-        info!("yolo_acc_name: {}", yolo_acc_name);
-        info!("yolo_conv_name: {}", yolo_conv_name);
-        info!("yolo_mp_name: {}", yolo_mp_name);
-        info!("yolo_yolo_name: {}", yolo_yolo_name);
-        info!("yolo_upsamp_name: {}", yolo_upsamp_name);
+        let yolo_acc_name = format!("/{}/{}", yolo_hier, "yolo_acc_top_0");
+        let yolo_conv_name = format!("/{}/{}", yolo_hier, "yolo_conv_top_0");
+        let yolo_mp_name = format!("/{}/{}", yolo_hier, "yolo_max_pool_top_0");
+        let yolo_yolo_name = format!("/{}/{}", yolo_hier, "yolo_yolo_top_0");
+        let yolo_upsamp_name = format!("/{}/{}", yolo_hier, "yolo_upsamp_top_0");
 
         // ハードウェアの構造体を初期化
         let sw0 = axis_switch::AxisSwitch::new(&hw_json[sw0_name])?;
