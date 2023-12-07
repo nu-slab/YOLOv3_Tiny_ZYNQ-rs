@@ -1,6 +1,6 @@
 pub mod layer_group;
 pub mod yolo;
-pub mod utils;
+pub mod postprocess;
 pub mod img_proc;
 pub mod detection_result;
 

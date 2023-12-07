@@ -7,7 +7,7 @@ use log::info;
 use xipdriver_rs::{axidma, axis_switch, json_as_map, json_as_str, yolo};
 
 use crate::img_proc;
-use crate::utils;
+use crate::postprocess;
 use crate::layer_group::{Activation, LayerGroup, PostProcess};
 use crate::detection_result::DetectionData;
 
@@ -554,7 +554,7 @@ impl YoloV3Tiny {
 
         let (yolo_out_0, yolo_out_1) = self.start_processing(&input_data)?;
 
-        let pp = utils::post_process(
+        let pp = postprocess::post_process(
             &yolo_out_0,
             &yolo_out_1,
             self.cls_num,
