@@ -1,6 +1,6 @@
 # YOLOv3-Tiny for Zynq 制御ライブラリ
 
-[Zynq向けYOLOv3-Tiny IP](https://github.com/nu-slab/YOLOv3_Tiny_ZYNQ-rs)を制御するためのRustライブラリです。
+[Zynq向けYOLOv3-Tiny IP](https://github.com/nu-slab/Kria-YOLO-HW)を制御するためのRustライブラリです。
 
 [UMV-HardwareTools](https://github.com/nu-slab/UMV-HardwareTools) が出力するハードウェア構成情報ファイルを利用します。
 
