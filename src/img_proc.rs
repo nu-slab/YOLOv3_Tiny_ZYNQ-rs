@@ -2,7 +2,7 @@ use image::imageops::FilterType;
 use image::{DynamicImage, Pixel, Rgb, RgbImage};
 
 use crate::thick_xiaolin_wu::draw_line;
-use crate::utils::DetectionData;
+use crate::detection_result::DetectionData;
 
 use imageproc::drawing::draw_filled_rect_mut;
 use imageproc::drawing::{draw_text_mut, text_size};

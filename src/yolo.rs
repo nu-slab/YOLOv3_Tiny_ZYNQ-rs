@@ -4,12 +4,12 @@ use anyhow::{anyhow, bail, Context, Result};
 use image::DynamicImage;
 use log::info;
 
-use crate::{
-    img_proc,
-    layer_group::{Activation, LayerGroup, PostProcess},
-    utils::{self, reverse_transform, DetectionData},
-};
 use xipdriver_rs::{axidma, axis_switch, json_as_map, json_as_str, yolo};
+
+use crate::img_proc;
+use crate::utils;
+use crate::layer_group::{Activation, LayerGroup, PostProcess};
+use crate::detection_result::DetectionData;
 
 pub fn match_hw(hw_json: &serde_json::Value, hier_name: &str, hw_name: &str) -> Result<String> {
     let hw_object = json_as_map!(hw_json);
@@ -553,6 +553,7 @@ impl YoloV3Tiny {
         let input_data = img_proc::letterbox(img, img_size, rotate_angle);
 
         let (yolo_out_0, yolo_out_1) = self.start_processing(&input_data)?;
+
         let pp = utils::post_process(
             &yolo_out_0,
             &yolo_out_1,
@@ -561,12 +562,12 @@ impl YoloV3Tiny {
             self.nms_threshold,
         );
 
-        Ok(reverse_transform(
-            img.width(),
-            img.height(),
-            rotate_angle,
-            &pp,
-        ))
+        let objs_rev = pp
+            .iter()
+            .map(|d| d.reverse_transform(img.width(), img.height(), rotate_angle))
+            .collect();
+
+        Ok(objs_rev)
     }
 
     pub fn stop_dmas(&self) {
