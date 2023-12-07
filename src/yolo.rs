@@ -1,15 +1,11 @@
 use std::{ffi::OsStr, io::Read, path::Path, vec};
 
-use anyhow::{anyhow, bail, Context, Result};
-use image::DynamicImage;
+use anyhow::{anyhow, Context, Result};
 use log::info;
 
 use xipdriver_rs::{axidma, axis_switch, json_as_map, json_as_str, yolo};
 
-use crate::img_proc;
-use crate::postprocess;
 use crate::layer_group::{Activation, LayerGroup, PostProcess};
-use crate::detection_result::DetectionData;
 
 pub fn match_hw(hw_json: &serde_json::Value, hier_name: &str, hw_name: &str) -> Result<String> {
     let hw_object = json_as_map!(hw_json);
@@ -29,7 +25,7 @@ const ACTIVE_EN: [u32; 8] = [
 ];
 
 /// YOLOのモデルをコントロールする構造体
-pub struct YoloV3Tiny {
+pub struct YoloController {
     sw0: axis_switch::AxisSwitch,
     sw1: axis_switch::AxisSwitch,
     sw2: axis_switch::AxisSwitch,
@@ -40,22 +36,14 @@ pub struct YoloV3Tiny {
     yolo_mp: yolo::Yolo,
     yolo_yolo: yolo::Yolo,
     yolo_upsamp: yolo::Yolo,
-    layer_groups: Vec<LayerGroup>,
-    cls_num: usize,
-    obj_threshold: f32,
-    nms_threshold: f32,
+    pub(crate) layer_groups: Vec<LayerGroup>,
 }
 
-impl YoloV3Tiny {
+impl YoloController {
     /// コンストラクタ
-    pub fn new<S: AsRef<OsStr> + ?Sized>(
+    pub fn new(
         hwinfo_path: &str,
         yolo_hier: &str,
-        cls_num: usize,
-        obj_threshold: f32,
-        nms_threshold: f32,
-        weights_dir: &S,
-        biases_dir: &S,
     ) -> Result<Self> {
         // ハードウェア情報の読み込み
         let hw_json = xipdriver_rs::hwinfo::read(hwinfo_path)?;
@@ -102,7 +90,7 @@ impl YoloV3Tiny {
         dma0.start();
         dma1.start();
 
-        let mut s = Self {
+        Ok(Self {
             sw0,
             sw1,
             sw2,
@@ -114,13 +102,7 @@ impl YoloV3Tiny {
             yolo_yolo,
             yolo_upsamp,
             layer_groups: vec![],
-            cls_num,
-            obj_threshold,
-            nms_threshold,
-        };
-        s.init(weights_dir, biases_dir);
-
-        Ok(s)
+        })
     }
 
     fn set_yolo_conv(&self, grp_idx: usize) {
@@ -445,27 +427,6 @@ impl YoloV3Tiny {
         Ok(())
     }
 
-    #[rustfmt::skip]
-    pub fn init<S: AsRef<OsStr> + ?Sized>(&mut self, weights_dir: &S, biases_dir: &S) {
-        self.layer_groups.push(LayerGroup::new(416, 416,  3,  1, 208, 208, 16,  1, false,  Activation::Leaky,  PostProcess::MaxPool, 2));
-        self.layer_groups.push(LayerGroup::new(208, 208, 16,  1, 104, 104, 32,  1, false,  Activation::Leaky,  PostProcess::MaxPool, 2));
-        self.layer_groups.push(LayerGroup::new(104, 104, 32,  1,  52,  52, 32,  2, false,  Activation::Leaky,  PostProcess::MaxPool, 2));
-        self.layer_groups.push(LayerGroup::new( 52,  52, 32,  2,  26,  26, 32,  4, false,  Activation::Leaky,  PostProcess::MaxPool, 2));
-        self.layer_groups.push(LayerGroup::new( 26,  26, 32,  4,  26,  26, 32,  8, false,  Activation::Leaky,     PostProcess::None, 2));
-        self.layer_groups.push(LayerGroup::new( 26,  26, 32,  1,  13,  13, 32,  8,  true, Activation::Linear,  PostProcess::MaxPool, 2));
-        self.layer_groups.push(LayerGroup::new( 13,  13, 32,  8,  13,  13, 32, 16, false,  Activation::Leaky,  PostProcess::MaxPool, 1));
-        self.layer_groups.push(LayerGroup::new( 13,  13, 32, 16,  13,  13, 32, 32, false,  Activation::Leaky,     PostProcess::None, 2));
-        self.layer_groups.push(LayerGroup::new( 13,  13, 32, 32,  13,  13, 32,  8, false,  Activation::Leaky,     PostProcess::None, 2));
-        self.layer_groups.push(LayerGroup::new( 13,  13, 32,  8,  13,  13, 32, 16, false,  Activation::Leaky,     PostProcess::None, 2));
-        self.layer_groups.push(LayerGroup::new( 13,  13, 32, 16,  13,  13, 32,  8, false, Activation::Linear,     PostProcess::Yolo, 2));
-        self.layer_groups.push(LayerGroup::new( 13,  13, 32,  8,  26,  26, 32,  4, false,  Activation::Leaky, PostProcess::Upsample, 2));
-        self.layer_groups.push(LayerGroup::new( 26,  26, 32, 12,  26,  26, 32,  8, false,  Activation::Leaky,     PostProcess::None, 2));
-        self.layer_groups.push(LayerGroup::new( 26,  26, 32,  8,  26,  26, 32,  8, false, Activation::Linear,     PostProcess::Yolo, 2));
-
-        self.read_weights(weights_dir);
-        self.read_biases(biases_dir);
-    }
-
     pub fn read_weights<S: AsRef<OsStr> + ?Sized>(&mut self, weights_dir: &S) {
         for (i, l) in self.layer_groups.iter_mut().enumerate() {
             let path = Path::new(weights_dir).join(format!("weights{}", i));
@@ -483,6 +444,7 @@ impl YoloV3Tiny {
             }
         }
     }
+
     pub fn read_biases<S: AsRef<OsStr> + ?Sized>(&mut self, biases_dir: &S) {
         for (i, l) in self.layer_groups.iter_mut().enumerate() {
             let path = Path::new(biases_dir).join(format!("biases{}", i));
@@ -501,82 +463,13 @@ impl YoloV3Tiny {
         }
     }
 
-    pub fn start_processing(&mut self, input_data: &[i16]) -> Result<(Vec<i16>, Vec<i16>)> {
-        self.layer_groups[0].inputs = Some(Vec::from(input_data));
-
-        for grp_idx in 0..=13 {
-            self.forward_layer_group(grp_idx)?;
-
-            if grp_idx == 4 || grp_idx == 8 {
-                // あとで使うため，cloneする
-                self.layer_groups[grp_idx + 1].inputs = self.layer_groups[grp_idx].outputs.clone();
-            } else if grp_idx == 10 {
-                // レイヤ11の入力はレイヤ8
-                self.layer_groups[11].inputs = self.layer_groups[8].outputs.take();
-            } else if grp_idx != 13 {
-                // あとで使わないものはmoveして高速化
-                self.layer_groups[grp_idx + 1].inputs = self.layer_groups[grp_idx].outputs.take();
-            }
-
-            if grp_idx == 11 {
-                // レイヤ12の入力はレイヤ11とレイヤ4をconcatしたもの
-                // レイヤ11のデータはすでに上でmoveしているので，レイヤ4のデータを結合してあげる
-                let output4 = self.layer_groups[4]
-                    .outputs
-                    .take()
-                    .context("layer_groups[4].outputs not set")?;
-
-                match &mut self.layer_groups[12].inputs {
-                    Some(inputs) => inputs.extend(output4),
-                    None => {
-                        bail!("layer_groups[12].inputs not set");
-                    }
-                }
-            }
-        }
-
-        // CNNの結果たち
-        let output10 = self.layer_groups[10]
-            .outputs
-            .take()
-            .context("layer_groups[10].inputs not set")?;
-        let output13 = self.layer_groups[13]
-            .outputs
-            .take()
-            .context("layer_groups[13].inputs not set")?;
-
-        Ok((output10, output13))
-    }
-
-    pub fn start(&mut self, img: &DynamicImage, rotate_angle: u32) -> Result<Vec<DetectionData>> {
-        let img_size = self.layer_groups[0].input_width;
-        let input_data = img_proc::letterbox(img, img_size, rotate_angle);
-
-        let (yolo_out_0, yolo_out_1) = self.start_processing(&input_data)?;
-
-        let pp = postprocess::post_process(
-            &yolo_out_0,
-            &yolo_out_1,
-            self.cls_num,
-            self.obj_threshold,
-            self.nms_threshold,
-        );
-
-        let objs_rev = pp
-            .iter()
-            .map(|d| d.reverse_transform(img.width(), img.height(), rotate_angle))
-            .collect();
-
-        Ok(objs_rev)
-    }
-
     pub fn stop_dmas(&self) {
         self.dma0.stop();
         self.dma1.stop();
     }
 }
 
-impl Drop for YoloV3Tiny {
+impl Drop for YoloController {
     // デストラクタ (スレッドを停止)
     fn drop(&mut self) {
         self.stop_dmas();
