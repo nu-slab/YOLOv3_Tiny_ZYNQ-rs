@@ -189,8 +189,10 @@ fn draw_label(img: &mut image::RgbImage, x1: f32, y1: f32, line_thickness: f32, 
 pub fn draw_bbox(img: &mut image::RgbImage, d_result: &[DetectionData], font_size: f32, line_thickness: f32) {
     let font = Vec::from(include_bytes!("RobotoMono.ttf") as &[u8]);
     let font = Font::try_from_vec(font).unwrap();
+    let mut sorted = d_result.to_vec();
+    sorted.sort_by(|a, b| a.confidence.partial_cmp(&b.confidence).unwrap());
 
-    for d in d_result.iter() {
+    for d in sorted.iter() {
         let color: image::Rgb<u8> = *image::Rgb::from_slice(&COLORS[d.class as usize]);
 
         let x1 = d.x1.round();
