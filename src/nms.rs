@@ -10,40 +10,14 @@ use crate::detection_result::DetectionData;
 /// # Return
 /// * IoUの値（0.0から1.0の範囲）
 fn iou(a: &DetectionData, b: &DetectionData) -> f32 {
-    let (x1, x2) = if a.x1 < b.x1 {
-        (b.x1, a.x1)
-    }
-    else {
-        (a.x1, b.x1)
-    };
+    let dx = a.x2.min(b.x2) - a.x1.max(b.x1);
+    let dy = a.y2.min(b.y2) - a.y1.max(b.y1);
+    let inter_area = (dx * dy).max(0.);
 
-    let (y1, y2) = if a.y1 < b.y1 {
-        (b.y1, a.y1)
-    }
-    else {
-        (a.y1, b.y1)
-    };
+    let area1 = (a.x2 - a.x1) * (a.y2 - a.y1);
+    let area2 = (b.x2 - b.x1) * (b.y2 - b.y1);
 
-    let (xx1, xx2) = if b.x2 < a.x2 {
-        (b.x2, a.x2)
-    }
-    else {
-        (a.x2, b.x2)
-    };
-
-    let (yy1, yy2) = if b.y2 < a.y2 {
-        (b.y2, a.y2)
-    }
-    else {
-        (a.y2, b.y2)
-    };
-
-    if x1 >= xx1 || y1 >= yy1 {
-        return 0.0;
-    }
-    let area1 = (xx1 - x1) * (yy1 - y1);
-    let area2 = (xx2 - x2) * (yy2 - y2);
-    area1 as f32 / area2 as f32
+    inter_area / (area1 + area2 - inter_area)
 }
 
 /// Non-Maximum Suppression (NMS)を適用して、重複した検出を削除します。
@@ -55,20 +29,17 @@ fn iou(a: &DetectionData, b: &DetectionData) -> f32 {
 /// # Return
 /// * NMSを適用した後の検出データの配列
 fn nms(bb: &[DetectionData], nms_threshold: f32) -> Vec<DetectionData> {
-    let mut sorted_bb = bb.to_vec();
-    sorted_bb.sort_by(|a, b| (-a.confidence).partial_cmp(&(-b.confidence)).unwrap());
+    let mut detections = bb.to_vec();
+    detections.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
 
-    for ib in 0..sorted_bb.len() {
-        for it in ((ib + 1)..sorted_bb.len()).rev() {
-            if iou(&sorted_bb[ib], &sorted_bb[it]) > nms_threshold {
-                sorted_bb.pop();
-            }
-        }
-        if sorted_bb.len() == ib + 1 {
-            break;
-        }
+    let mut keep = vec![];
+    while !detections.is_empty() {
+        let detection = detections.remove(0);
+        keep.push(detection);
+
+        detections.retain(|x| iou(&detection, x) < nms_threshold);
     }
-    sorted_bb
+    keep
 }
 
 /// 検出データをクラスごとに分割し、各クラスにNMSを適用します。
