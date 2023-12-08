@@ -16,10 +16,10 @@ fn main() -> Result<()> {
     let cam_device_index = 2;
     let frame_width = 640;
     let frame_height = 480;
-    let wdir = "examples/weights";
+    let wpath = "examples/weights.tar.gz";
 
     // YOLO IP を初期化
-    let mut yolo = YoloV3Tiny::new("/slab/hwinfo.json", "yolo", 7, 0.2, 0.1, wdir, wdir)?;
+    let mut yolo = YoloV3Tiny::new("/slab/hwinfo.json", "yolo", 7, 0.2, 0.1, wpath)?;
 
     // YOLOの処理中にもカメラのバッファを更新する必要があるため，マルチスレッドでカメラだけ動かしておく
     // 動かしておかないと (YOLOの実行時間) * (カメラのバッファ数: 3) 秒前の画像になる

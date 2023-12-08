@@ -6,10 +6,10 @@ use yolo_v3_tiny_zynq::yolov3_tiny::YoloV3Tiny;
 
 fn main() -> Result<()> {
     // 重みファイルがあるディレクトリ
-    let wdir = "examples/weights";
+    let wpath = "examples/weights.tar.gz";
 
     // YOLOのモデルを初期化
-    let mut yolo = YoloV3Tiny::new("/slab/hwinfo.json", "yolo", 7, 0.2, 0.1, wdir, wdir)?;
+    let mut yolo = YoloV3Tiny::new("/slab/hwinfo.json", "yolo", 7, 0.2, 0.1, wpath)?;
 
     // テスト画像を読み込む
     let test_img = image::open("examples/t19.jpg")?;

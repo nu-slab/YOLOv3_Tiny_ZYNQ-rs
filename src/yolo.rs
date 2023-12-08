@@ -1,8 +1,12 @@
 //! YOLOのモデルをコントロールするモジュール
 
+use std::fs::File;
 use std::{ffi::OsStr, io::Read, path::Path, vec};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use flate2::read::GzDecoder;
+use log::{warn, info};
+use tar::Archive;
 
 use xipdriver_rs::{axidma, axis_switch, yolo};
 
@@ -543,7 +547,7 @@ impl YoloController {
     /// # 注意
     /// この関数は各レイヤーグループの重みデータを読み込みます。データは16ビット整数として解釈されます。
     /// ファイルが存在しない場合、そのレイヤーグループの重みは更新されません。
-    pub fn read_weights<S: AsRef<OsStr> + ?Sized>(&mut self, weights_dir: &S) {
+    pub fn _read_weights<S: AsRef<OsStr> + ?Sized>(&mut self, weights_dir: &S) {
         for (i, l) in self.layer_groups.iter_mut().enumerate() {
             let path = Path::new(weights_dir).join(format!("weights{}", i));
             if let Ok(mut file) = std::fs::File::open(path) {
@@ -569,7 +573,7 @@ impl YoloController {
     /// # 注意
     /// この関数は各レイヤーグループのバイアスデータを読み込みます。データは16ビット整数として解釈されます。
     /// ファイルが存在しない場合、そのレイヤーグループのバイアスは更新されません。
-    pub fn read_biases<S: AsRef<OsStr> + ?Sized>(&mut self, biases_dir: &S) {
+    pub fn _read_biases<S: AsRef<OsStr> + ?Sized>(&mut self, biases_dir: &S) {
         for (i, l) in self.layer_groups.iter_mut().enumerate() {
             let path = Path::new(biases_dir).join(format!("biases{}", i));
             if let Ok(mut file) = std::fs::File::open(path) {
@@ -585,6 +589,60 @@ impl YoloController {
                 );
             }
         }
+    }
+
+    /// 重みとバイアスデータを読み込みます。
+    ///
+    /// # Args
+    /// * `path` - 重みとバイアスデータが格納されているgzipアーカイブへのパス
+    ///
+    /// # 注意
+    /// この関数は各レイヤーグループの重みとバイアスデータを読み込みます。データは16ビット整数として解釈されます。
+    /// * ファイル名が "biases" で始まる場合、バイアスデータとして解釈されます。
+    /// * ファイル名が "weights" で始まる場合、重みデータとして解釈されます。
+    /// * それ以外のファイル名の場合、警告がログに出力され、そのファイルは無視されます。
+    pub fn read_weights_and_biases<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
+        let file = File::open(path)?;
+        let mut archive = Archive::new(GzDecoder::new(file));
+
+        for file in archive.entries()? {
+            let mut file = file?;
+            let file_path = file.path()?;
+            let file_name = file_path
+                .file_name()
+                .context("file_name error")?
+                .to_str()
+                .context("to_str error")?
+                .to_string();
+
+            // Skip files that start with '._'
+            if file_name.starts_with("._") {
+                continue;
+            }
+
+            let mut buf = vec![];
+            file.read_to_end(&mut buf).unwrap();
+            let data: Vec<i16> = buf
+                .chunks(2)
+                .map(|chunk| {
+                    let bytes = [chunk[0], chunk[1]];
+                    i16::from_le_bytes(bytes)
+                })
+                .collect();
+
+            if &file_name[..6] == "biases" {
+                let gnum: usize = file_name[6..].parse()?;
+                info!("Loading bias {}", gnum);
+                self.layer_groups[gnum].biases = Some(data);
+            } else if &file_name[..7] == "weights" {
+                let gnum: usize = file_name[7..].parse()?;
+                info!("Loading weight {}", gnum);
+                self.layer_groups[gnum].weights = Some(data);
+            } else {
+                warn!("{} is not biases or weights file", file_name);
+            }
+        }
+        Ok(())
     }
 
     /// DMAを停止します

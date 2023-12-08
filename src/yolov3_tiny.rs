@@ -1,6 +1,6 @@
 //! YOLOv3-Tiny のモデルをコントロールするモジュール
 
-use std::ffi::OsStr;
+use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 use image::DynamicImage;
@@ -33,14 +33,13 @@ impl YoloV3Tiny {
     ///
     /// # Return
     /// * 新たな `YoloV3Tiny` インスタンス
-    pub fn new<S: AsRef<OsStr> + ?Sized>(
+    pub fn new<P: AsRef<Path>>(
         hwinfo_path: &str,
         yolo_hier: &str,
         cls_num: usize,
         obj_threshold: f32,
         nms_threshold: f32,
-        weights_dir: &S,
-        biases_dir: &S,
+        weights_path: P,
     ) -> Result<Self> {
 
         let yc = YoloController::new(
@@ -49,7 +48,8 @@ impl YoloV3Tiny {
         )?;
 
         let mut s = Self{ yc, cls_num, obj_threshold, nms_threshold };
-        s.init(weights_dir, biases_dir);
+        s.init(weights_path)?;
+
         Ok(s)
     }
 
@@ -59,7 +59,7 @@ impl YoloV3Tiny {
     /// * `weights_dir` - 重みのディレクトリ
     /// * `biases_dir` - バイアスのディレクトリ
     #[rustfmt::skip]
-    pub fn init<S: AsRef<OsStr> + ?Sized>(&mut self, weights_dir: &S, biases_dir: &S) {
+    pub fn init<P: AsRef<Path>>(&mut self, weights_path: P) -> Result<()> {
         self.yc.layer_groups.push(LayerGroup::new(416, 416,  3,  1, 208, 208, 16,  1, false,  Activation::Leaky,  PostProcess::MaxPool, 2));
         self.yc.layer_groups.push(LayerGroup::new(208, 208, 16,  1, 104, 104, 32,  1, false,  Activation::Leaky,  PostProcess::MaxPool, 2));
         self.yc.layer_groups.push(LayerGroup::new(104, 104, 32,  1,  52,  52, 32,  2, false,  Activation::Leaky,  PostProcess::MaxPool, 2));
@@ -75,8 +75,21 @@ impl YoloV3Tiny {
         self.yc.layer_groups.push(LayerGroup::new( 26,  26, 32, 12,  26,  26, 32,  8, false,  Activation::Leaky,     PostProcess::None, 2));
         self.yc.layer_groups.push(LayerGroup::new( 26,  26, 32,  8,  26,  26, 32,  8, false, Activation::Linear,     PostProcess::Yolo, 2));
 
-        self.yc.read_weights(weights_dir);
-        self.yc.read_biases(biases_dir);
+        self.read_weights_and_biases(weights_path)
+    }
+
+    /// 重みとバイアスデータを読み込みます。
+    ///
+    /// # Args
+    /// * `path` - 重みとバイアスデータが格納されているgzipアーカイブへのパス
+    ///
+    /// # 注意
+    /// この関数は各レイヤーグループの重みとバイアスデータを読み込みます。データは16ビット整数として解釈されます。
+    /// * ファイル名が "biases" で始まる場合、バイアスデータとして解釈されます。
+    /// * ファイル名が "weights" で始まる場合、重みデータとして解釈されます。
+    /// * それ以外のファイル名の場合、警告がログに出力され、そのファイルは無視されます。
+    pub fn read_weights_and_biases<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
+        self.yc.read_weights_and_biases(path)
     }
 
     /// 入力データの処理を開始します。
