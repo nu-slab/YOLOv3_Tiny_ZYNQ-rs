@@ -35,7 +35,7 @@ fn main() -> Result<()> {
         // カメラ画像を読み込む
         let img = loader.receive()?;
         // YOLOの処理を開始
-        let result = yolo.start(&img, 90)?;
+        let result = yolo.start_with_img_proc(&img, 90)?;
 
         let end = start.elapsed();
         let t = end.as_secs_f64() * 1000.0;

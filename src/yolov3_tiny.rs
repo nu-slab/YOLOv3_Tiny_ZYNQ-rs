@@ -5,10 +5,10 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use image::DynamicImage;
 
-use crate::img_proc;
-use crate::postprocess;
-use crate::layer_group::{Activation, LayerGroup, PostProcess};
 use crate::detection_result::DetectionData;
+use crate::img_proc;
+use crate::layer_group::{Activation, LayerGroup, PostProcess};
+use crate::postprocess;
 use crate::yolo::YoloController;
 
 /// YOLOv3-Tiny のモデルをコントロールする構造体
@@ -41,13 +41,14 @@ impl YoloV3Tiny {
         nms_threshold: f32,
         weights_path: P,
     ) -> Result<Self> {
+        let yc = YoloController::new(hwinfo_path, yolo_hier)?;
 
-        let yc = YoloController::new(
-            hwinfo_path,
-            yolo_hier,
-        )?;
-
-        let mut s = Self{ yc, cls_num, obj_threshold, nms_threshold };
+        let mut s = Self {
+            yc,
+            cls_num,
+            obj_threshold,
+            nms_threshold,
+        };
         s.init(weights_path)?;
 
         Ok(s)
@@ -107,13 +108,15 @@ impl YoloV3Tiny {
 
             if grp_idx == 4 || grp_idx == 8 {
                 // あとで使うため，cloneする
-                self.yc.layer_groups[grp_idx + 1].inputs = self.yc.layer_groups[grp_idx].outputs.clone();
+                self.yc.layer_groups[grp_idx + 1].inputs =
+                    self.yc.layer_groups[grp_idx].outputs.clone();
             } else if grp_idx == 10 {
                 // レイヤ11の入力はレイヤ8
                 self.yc.layer_groups[11].inputs = self.yc.layer_groups[8].outputs.take();
             } else if grp_idx != 13 {
                 // あとで使わないものはmoveして高速化
-                self.yc.layer_groups[grp_idx + 1].inputs = self.yc.layer_groups[grp_idx].outputs.take();
+                self.yc.layer_groups[grp_idx + 1].inputs =
+                    self.yc.layer_groups[grp_idx].outputs.take();
             }
 
             if grp_idx == 11 {
@@ -154,11 +157,8 @@ impl YoloV3Tiny {
     ///
     /// # Return
     /// * 物体検出結果
-    pub fn start(&mut self, img: &DynamicImage, rotate_angle: u32) -> Result<Vec<DetectionData>> {
-        let img_size = self.yc.layer_groups[0].input_width;
-        let input_data = img_proc::letterbox(img, img_size, rotate_angle);
-
-        let (yolo_out_0, yolo_out_1) = self.start_processing(&input_data)?;
+    pub fn start(&mut self, input_data: &[i16]) -> Result<Vec<DetectionData>> {
+        let (yolo_out_0, yolo_out_1) = self.start_processing(input_data)?;
 
         let pp = postprocess::post_process(
             &yolo_out_0,
@@ -167,10 +167,69 @@ impl YoloV3Tiny {
             self.obj_threshold,
             self.nms_threshold,
         );
+        Ok(pp)
+    }
 
-        let objs_rev = pp
+    /// 画像の処理を開始します。
+    ///
+    /// # Args
+    /// * `img` - 入力画像
+    /// * `rotate_angle` - 回転角度
+    ///
+    /// # Return
+    /// * 物体検出結果
+    pub fn start_with_img_proc(
+        &mut self,
+        img: &DynamicImage,
+        rotate_angle: u32,
+    ) -> Result<Vec<DetectionData>> {
+        let img_size = self.yc.layer_groups[0].input_width;
+        let input_data = img_proc::letterbox(img, img_size, rotate_angle);
+
+        let objs_rev = self
+            .start(&input_data)?
             .iter()
-            .map(|d| d.reverse_transform(img.width(), img.height(), rotate_angle))
+            .map(|d| d.reverse_transform(img.width(), img.height(), rotate_angle, false))
+            .collect();
+
+        Ok(objs_rev)
+    }
+
+    /// 画像の処理を開始します。
+    ///
+    /// # Args
+    /// * `img` - 入力画像
+    /// * `rotate_angle` - 回転角度
+    /// * `rotate_en` - 画像を回転させるか。事前に回転させている場合はfalseを指定してください
+    ///
+    /// # Return
+    /// * 物体検出結果
+    pub fn start_with_patial_enlargement(
+        &mut self,
+        img: &DynamicImage,
+        rotate_angle: u32,
+        rotate_en: bool,
+        crop_x: Option<u32>,
+        crop_y: Option<u32>,
+        crop_w: u32,
+        crop_h: u32,
+    ) -> Result<Vec<DetectionData>> {
+        let img_size = self.yc.layer_groups[0].input_width;
+        let input_data = img_proc::letterbox_with_patial_enlargement(
+            img,
+            img_size,
+            rotate_angle,
+            rotate_en,
+            crop_x,
+            crop_y,
+            crop_w,
+            crop_h,
+        );
+
+        let objs_rev = self
+            .start(&input_data)?
+            .iter()
+            .map(|d| d.reverse_transform(img.width(), img.height(), rotate_angle, true))
             .collect();
 
         Ok(objs_rev)
