@@ -121,8 +121,8 @@ pub fn letterbox_with_patial_enlargement(
     };
 
     let crop = img.crop_imm(crop_x, crop_y, crop_w, crop_h);
-    let crop_resized = crop.resize(side_w, side_h, FilterType::Gaussian);
-    place_pixels(&mut new_img, &crop_resized, size, size - pad_w, 0);
+    let crop_resized = crop.resize(side_w, side_h, FilterType::Nearest);
+    place_pixels(&mut new_img, &crop_resized, size, size - side_w, size - side_h);
 
     new_img
 }
@@ -197,9 +197,9 @@ pub fn letterbox_img_with_patial_enlargement(
     };
 
     let crop = rotated.crop_imm(crop_x, crop_y, crop_w, crop_h);
-    let crop_resized = crop.resize(side_w, side_h, FilterType::Gaussian);
+    let crop_resized = crop.resize(side_w, side_h, FilterType::Nearest);
     for (x, y, &pixel) in crop_resized.to_rgb8().enumerate_pixels() {
-        new_img.put_pixel(x + (size - pad_w), y, pixel);
+        new_img.put_pixel(x + (size - side_w), y + (size - side_h), pixel);
     }
     new_img
 }
