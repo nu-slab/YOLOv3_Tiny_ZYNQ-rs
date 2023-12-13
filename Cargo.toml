@@ -7,9 +7,11 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
+fast_image_resize = "2.7.3"
 flate2 = "1.0.28"
 image = "0.24.7"
 imageproc = "0.23.0"
+color_space = "0.5.3"
 log = "0.4.20"
 rusttype = "0.9.3"
 tar = "0.4.40"
@@ -17,3 +19,4 @@ xipdriver-rs = { git = "https://github.com/nu-slab/xipdriver-rs.git", version = 
 
 [dev-dependencies]
 v4l = "0.14.0"
+zune-jpeg = "0.4.11"

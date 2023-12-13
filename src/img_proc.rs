@@ -1,14 +1,14 @@
 //! YOLOに関する画像処理モジュール
 
-use image::imageops::FilterType;
+use fast_image_resize as fr;
 use image::{DynamicImage, Pixel, Rgb, RgbImage};
-
-use crate::detection_result::DetectionData;
-
 use imageproc::drawing::draw_filled_rect_mut;
 use imageproc::drawing::{draw_text_mut, text_size};
 use imageproc::rect::Rect;
 use rusttype::{Font, Scale};
+use std::num::NonZeroU32;
+
+use crate::detection_result::DetectionData;
 
 /// 画像を指定した角度で回転させます。
 ///
@@ -38,13 +38,7 @@ pub fn rotate_img(img: &DynamicImage, angle: u32) -> DynamicImage {
 /// * `size` - 配置先のデータのサイズ
 /// * `x_offset` - x軸方向のオフセット
 /// * `y_offset` - y軸方向のオフセット
-pub fn place_pixels(
-    data: &mut [i16],
-    img: &DynamicImage,
-    size: u32,
-    x_offset: u32,
-    y_offset: u32,
-) {
+pub fn place_pixels(data: &mut [i16], img: &DynamicImage, size: u32, x_offset: u32, y_offset: u32) {
     for (x, y, pixel) in img.to_rgb8().enumerate_pixels() {
         let base_addr = 4 * (x + x_offset + (y + y_offset) * size) as usize;
         data[base_addr] = i16::from(pixel[0]);
@@ -52,6 +46,38 @@ pub fn place_pixels(
         data[base_addr + 2] = i16::from(pixel[2]);
         // data[base_addr + 3] = 0x7FFF; // for Debug
     }
+}
+
+fn fast_resize(src_img: &RgbImage, dst_width: u32, dst_height: u32) -> RgbImage {
+    let width = NonZeroU32::new(src_img.width()).unwrap();
+    let height = NonZeroU32::new(src_img.height()).unwrap();
+
+    let src_view =
+        fr::Image::from_vec_u8(width, height, src_img.to_vec(), fr::PixelType::U8x3).unwrap();
+
+    let wratio = dst_width as f32 / src_img.width() as f32;
+    let hratio = dst_height as f32 / src_img.height() as f32;
+    let ratio = f32::min(wratio, hratio);
+    let nw = NonZeroU32::new((src_img.width() as f32 * ratio).round() as u32).unwrap();
+    let nh = NonZeroU32::new((src_img.height() as f32 * ratio).round() as u32).unwrap();
+
+    // Create container for data of destination image
+    let mut dst_image = fr::Image::new(nw, nh, src_view.pixel_type());
+    // Get mutable view of destination image data
+    let mut dst_view = dst_image.view_mut();
+
+    // Create Resizer instance and resize source image
+    // into buffer of destination image
+    let mut resizer = fr::Resizer::new(fr::ResizeAlg::Convolution(fr::FilterType::Box));
+
+    resizer.resize(&src_view.view(), &mut dst_view).unwrap();
+
+    RgbImage::from_raw(
+        dst_view.width().into(),
+        dst_view.height().into(),
+        dst_image.into_vec(),
+    )
+    .unwrap()
 }
 
 /// 画像をリサイズ・回転し、正方形に整形したYOLO入力データを生成します。
@@ -66,7 +92,7 @@ pub fn place_pixels(
 ///
 /// * リサイズ、回転、パディングを行った画像のピクセルデータ
 pub fn letterbox(img: &DynamicImage, size: u32, rotate_angle: u32) -> Vec<i16> {
-    let resized = img.resize(size, size, FilterType::Nearest);
+    let resized = DynamicImage::from(fast_resize(img.as_rgb8().unwrap(), size, size));
     let rotated = rotate_img(&resized, rotate_angle);
 
     let pad_w = rotated.width().abs_diff(size) / 2;
@@ -103,7 +129,7 @@ pub fn letterbox_with_patial_enlargement(
     crop_w: u32,
     crop_h: u32,
 ) -> Vec<i16> {
-    let resized = img.resize(size, size, FilterType::Nearest);
+    let resized = DynamicImage::from(fast_resize(img.as_rgb8().unwrap(), size, size));
     let rotated = rotate_img(&resized, if rotate_en { rotate_angle } else { 0 });
 
     let pad_w = rotated.width().abs_diff(size);
@@ -121,8 +147,14 @@ pub fn letterbox_with_patial_enlargement(
     };
 
     let crop = img.crop_imm(crop_x, crop_y, crop_w, crop_h);
-    let crop_resized = crop.resize(side_w, side_h, FilterType::Nearest);
-    place_pixels(&mut new_img, &crop_resized, size, size - side_w, size - side_h);
+    let crop_resized = DynamicImage::from(fast_resize(crop.as_rgb8().unwrap(), side_w, side_h));
+    place_pixels(
+        &mut new_img,
+        &crop_resized,
+        size,
+        size - side_w,
+        size - side_h,
+    );
 
     new_img
 }
@@ -139,7 +171,7 @@ pub fn letterbox_with_patial_enlargement(
 ///
 /// * リサイズ、回転、パディングを行ったRGB画像
 pub fn letterbox_img(img: &DynamicImage, size: u32, rotate_angle: u32) -> RgbImage {
-    let resized = img.resize(size, size, FilterType::Nearest);
+    let resized = DynamicImage::from(fast_resize(img.as_rgb8().unwrap(), size, size));
     let rotated = rotate_img(&resized, rotate_angle);
 
     let pad_w = rotated.width().abs_diff(size) / 2;
@@ -197,8 +229,9 @@ pub fn letterbox_img_with_patial_enlargement(
     };
 
     let crop = rotated.crop_imm(crop_x, crop_y, crop_w, crop_h);
-    let crop_resized = crop.resize(side_w, side_h, FilterType::Nearest);
-    for (x, y, &pixel) in crop_resized.to_rgb8().enumerate_pixels() {
+    let crop_resized = fast_resize(crop.as_rgb8().unwrap(), side_w, side_h);
+
+    for (x, y, &pixel) in crop_resized.enumerate_pixels() {
         new_img.put_pixel(x + (size - side_w), y + (size - side_h), pixel);
     }
     new_img

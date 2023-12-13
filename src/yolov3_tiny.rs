@@ -1,9 +1,9 @@
 //! YOLOv3-Tiny のモデルをコントロールするモジュール
 
 use std::path::Path;
-
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use image::DynamicImage;
+use color_space;
 
 use crate::detection_result::DetectionData;
 use crate::img_proc;
@@ -17,6 +17,8 @@ pub struct YoloV3Tiny {
     cls_num: usize,
     obj_threshold: f32,
     nms_threshold: f32,
+    n_regions: u16,
+    trim_rate: f32,
 }
 
 impl YoloV3Tiny {
@@ -48,6 +50,8 @@ impl YoloV3Tiny {
             cls_num,
             obj_threshold,
             nms_threshold,
+            n_regions: 2,
+            trim_rate: 0.12,
         };
         s.init(weights_path)?;
 
@@ -213,6 +217,7 @@ impl YoloV3Tiny {
         crop_y: Option<u32>,
         crop_w: u32,
         crop_h: u32,
+        yolo_en: bool,
     ) -> Result<Vec<DetectionData>> {
         let img_size = self.yc.layer_groups[0].input_width;
         let input_data = img_proc::letterbox_with_patial_enlargement(
@@ -226,12 +231,111 @@ impl YoloV3Tiny {
             crop_h,
         );
 
-        let objs_rev = self
+
+        let mut objs_rev : Vec<_> = self
             .start(&input_data)?
             .iter()
             .map(|d| d.reverse_transform(img.width(), img.height(), rotate_angle, true))
-            .collect();
+            .collect::<Vec<_>>();
 
+
+        if !yolo_en {
+            let letterbox_img = img_proc::letterbox_img_with_patial_enlargement(
+                img, 
+                rotate_angle, 
+                rotate_en, 
+                crop_x,
+                crop_y,
+                crop_w,
+                crop_h
+            );
+
+            let letterbox_vec = letterbox_img.pixels().collect::<Vec<_>>();
+
+            for d_data in objs_rev.iter_mut() {
+                if d_data.class <= 2 {
+                    let trim_w: f32 = ((d_data.x2 - d_data.x1) * self.trim_rate) as f32;
+                    let bbox = Region::new((d_data.x1 + trim_w, d_data.y1), (d_data.x2 - trim_w, d_data.y2))?;
+                    let region_w = bbox.width() / self.n_regions;
+                    let region_h = bbox.height();
+
+                    let mut regions = Vec::new();
+                    for idx in 0..self.n_regions {
+                        let start_x = bbox.start.0 + idx * region_w;
+                        let start_y = bbox.start.1;
+                        let end_x = start_x + region_w;
+                        let end_y = start_y + region_h;
+                        let new_region = Region::new((f32::from(start_x), f32::from(start_y)), (f32::from(end_x), f32::from(end_y)))?;
+                        regions.push(new_region);
+                    }
+
+                    let mut x = bbox.start.0;
+                    let mut y = bbox.start.1;
+
+                    while y < bbox.end.1.into() {
+                        let pixel_idx = (y as u32 * letterbox_img.width() + x as u32) as usize;
+
+                        let rgb = color_space::Rgb::new(letterbox_vec[pixel_idx][0] as f64,
+                                                        letterbox_vec[pixel_idx][1] as f64,
+                                                        letterbox_vec[pixel_idx][2] as f64);
+                        let hsv = color_space::Hsv::from(rgb);
+                        for region in regions.iter_mut() {
+                            if region.is_in((x as u16, y as u16)) { region.add_brightness(hsv.v) }
+                        }
+
+                        x = x + 1;
+                        if x == bbox.end.0 { x = bbox.start.0; y = y + 1;}
+                    }
+
+                    let class = regions.iter().enumerate()
+                        .max_by(|(_, r1), (_, r2)| r1.total_brightness.total_cmp(&r2.total_brightness))
+                        .map(|(idx, _)|{
+                            if idx == 0 { 2 }
+                            else if idx == (self.n_regions - 1) as usize { 0 }
+                            else { 1 }
+                        })
+                        .unwrap();
+                    d_data.class = class;
+                }
+                    
+            }
+        }
         Ok(objs_rev)
     }
 }
+
+pub struct Region {
+    start: (u16, u16),
+    end: (u16, u16),
+    total_brightness: f64
+}
+
+impl Region {
+    pub fn new(s : (f32, f32), e : (f32, f32)) -> Result<Self> {
+        let values = [s.0, s.1, e.0, e.1];
+        ensure!(values.iter().all(|f| f.is_sign_positive()), "Coordinates must be positive");
+        let start = (s.0.floor() as u16, s.1.floor() as u16);
+        let end = (e.0.floor() as u16, e.1.floor() as u16);
+        let total_brightness = 0.0;
+        Ok(Self { start, end, total_brightness} )
+    }
+
+    pub fn width(&self) -> u16 {
+        self.end.0.abs_diff(self.start.0)
+    }
+
+
+    pub fn height(&self) -> u16 {
+        self.end.1.abs_diff(self.start.1)
+    }
+
+    pub fn is_in(&self, p: (u16, u16)) -> bool {
+        self.start.0 < p.0 && self.start.1 < p.1 && self.end.0 > p.0 && self.end.1 > p.1
+    }
+
+    pub fn add_brightness(&mut self, value : f64) {
+        self.total_brightness = self.total_brightness + value;
+    }
+}
+
+
