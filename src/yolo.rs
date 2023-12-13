@@ -499,7 +499,7 @@ impl YoloController {
     /// * Result。処理に失敗した場合はエラー
     pub fn start_layer_processing(&mut self, grp_idx: usize) -> Result<()> {
         for off in 0..self.layer_groups[grp_idx].output_fold_factor {
-            let mut acc_output_buff = vec![0i16; self.layer_groups[grp_idx].acc_size as usize];
+            let mut acc_output_buff = vec![];
             let mut acc_input_buff = vec![0i16; self.layer_groups[grp_idx].acc_size as usize];
             // 最大32チャネルのサブチャネルを処理する
             for iff in 0..self.layer_groups[grp_idx].input_fold_factor {
@@ -531,9 +531,7 @@ impl YoloController {
                     )?;
                 }
 
-                let mid_ptr = acc_input_buff;
-                acc_input_buff = acc_output_buff;
-                acc_output_buff = mid_ptr;
+                std::mem::swap(&mut acc_input_buff, &mut acc_output_buff);
             }
         }
         Ok(())

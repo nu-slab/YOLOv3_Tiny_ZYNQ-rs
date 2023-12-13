@@ -39,7 +39,7 @@ pub fn rotate_img(img: &DynamicImage, angle: u32) -> DynamicImage {
 /// * `x_offset` - x軸方向のオフセット
 /// * `y_offset` - y軸方向のオフセット
 pub fn place_pixels(
-    data: &mut Vec<i16>,
+    data: &mut [i16],
     img: &DynamicImage,
     size: u32,
     x_offset: u32,
@@ -177,7 +177,7 @@ pub fn letterbox_img_with_patial_enlargement(
     crop_w: u32,
     crop_h: u32,
 ) -> RgbImage {
-    let rotated = rotate_img(&img, if rotate_en { rotate_angle } else { 0 });
+    let rotated = rotate_img(img, if rotate_en { rotate_angle } else { 0 });
     let size = u32::max(rotated.width(), rotated.height());
 
     let pad_w = rotated.width().abs_diff(size);
@@ -296,7 +296,7 @@ fn draw_label(
 
     let pad = 6.;
     let scale = Scale::uniform(label_h);
-    let (text_w, _) = text_size(scale, &font, &text);
+    let (text_w, _) = text_size(scale, font, text);
     let v_metrics = font.v_metrics(scale);
     let text_h = v_metrics.ascent - v_metrics.descent + v_metrics.line_gap;
 
@@ -317,8 +317,8 @@ fn draw_label(
         (dx1 + pad) as i32,
         text_y as i32,
         scale,
-        &font,
-        &text,
+        font,
+        text,
     );
 }
 

@@ -69,8 +69,7 @@ pub fn nms_process(
     // 各クラスに Non-Maximum Suppression (NMS) を適用し，重なっているBBoxの中でコンフィデンスが最大のものを集める
     let new_box: Vec<DetectionData> = cls
         .into_iter()
-        .map(|d| nms(&d, nms_threshold))
-        .flatten()
+        .flat_map(|d| nms(&d, nms_threshold))
         .collect();
     new_box
 }

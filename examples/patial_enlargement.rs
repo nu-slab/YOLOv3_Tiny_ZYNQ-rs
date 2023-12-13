@@ -55,7 +55,7 @@ fn main() -> Result<()> {
     println!("Processing time:{:.03}ms, {:.1}FPS", t, 1000. / t);
 
     // 画像を保存
-    rgb_img.save(format!("./out/out.png"))?;
+    rgb_img.save("./out/out.png")?;
 
     Ok(())
 }

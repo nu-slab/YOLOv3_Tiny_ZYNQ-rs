@@ -74,17 +74,17 @@ fn ch_reshape(reorder_arr: &[f32], grid_num: usize, cls_num: usize) -> (Vec<f32>
 /// * `reshape` - アンカーボックスの値を計算するためのf32型のベクトル
 /// * `grid_num` - グリッドの数（アンカーボックスの計算に使用）
 /// * `anchor_box` - アンカーボックスの初期値
-fn get_anchor_box(reshape: &mut Vec<f32>, grid_num: usize, anchor_box: [[f32; 2]; 3]) {
+fn get_anchor_box(reshape: &mut [f32], grid_num: usize, anchor_box: [[f32; 2]; 3]) {
     let grid_width = 416.0 / grid_num as f32;
     let mut w_cnt = 0.;
     let mut h_cnt = 0.;
     for i in (0..grid_num * grid_num * 18).step_by(18) {
-        for j in 0..=2 {
+        for (j, ab) in anchor_box.iter().enumerate() {
             let idx = i + 6 * j;
-            reshape[idx + 0] = grid_width * w_cnt + grid_width * reshape[idx]; //rm-sigmoid
+            reshape[idx] = grid_width * w_cnt + grid_width * reshape[idx]; //rm-sigmoid
             reshape[idx + 1] = grid_width * h_cnt + grid_width * reshape[idx + 1]; //rm-sigmoid
-            reshape[idx + 2] = anchor_box[j][0] * (reshape[idx + 2]).exp();
-            reshape[idx + 3] = anchor_box[j][1] * (reshape[idx + 3]).exp();
+            reshape[idx + 2] = ab[0] * (reshape[idx + 2]).exp();
+            reshape[idx + 3] = ab[1] * (reshape[idx + 3]).exp();
         }
         w_cnt += 1.;
         if w_cnt == (grid_num as f32) {
