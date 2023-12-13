@@ -25,7 +25,7 @@ fn fix2float(input: i16) -> f32 {
 /// # Return
 /// * 再配置されたf32型のベクトル
 fn ch_reorder(arr: &[f32], grid_num: usize) -> Vec<f32> {
-    let mut reorder: Vec<f32> = vec![];
+    let mut reorder: Vec<f32> = Vec::with_capacity(grid_num * grid_num * 8 * 32);
     for i in 0..grid_num * grid_num {
         for j in 0..8 {
             for k in 0..32 {
