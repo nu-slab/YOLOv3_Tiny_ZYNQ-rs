@@ -17,7 +17,7 @@ pub struct YoloV3Tiny {
     cls_num: usize,
     obj_threshold: f32,
     nms_threshold: f32,
-    n_regions: u16,
+    n_regions: u32,
     trim_rate: f32,
 }
 
@@ -254,7 +254,7 @@ impl YoloV3Tiny {
 
             for d_data in objs_rev.iter_mut() {
                 if d_data.class <= 2 {
-                    let trim_w: f32 = ((d_data.x2 - d_data.x1) * self.trim_rate) as f32;
+                    let trim_w: f32 = (d_data.x2 - d_data.x1) * self.trim_rate;
                     let bbox = Region::new((d_data.x1 + trim_w, d_data.y1), (d_data.x2 - trim_w, d_data.y2))?;
                     let region_w = bbox.width() / self.n_regions;
                     let region_h = bbox.height();
@@ -265,7 +265,7 @@ impl YoloV3Tiny {
                         let start_y = bbox.start.1;
                         let end_x = start_x + region_w;
                         let end_y = start_y + region_h;
-                        let new_region = Region::new((f32::from(start_x), f32::from(start_y)), (f32::from(end_x), f32::from(end_y)))?;
+                        let new_region = Region::new((start_x as f32, start_y as f32), (end_x as f32, end_y as f32))?;
                         regions.push(new_region);
                     }
 
@@ -273,14 +273,14 @@ impl YoloV3Tiny {
                     let mut y = bbox.start.1;
 
                     while y < bbox.end.1.into() {
-                        let pixel_idx = (y as u32 * letterbox_img.width() + x as u32) as usize;
+                        let pixel_idx = (y * letterbox_img.width() + x) as usize;
 
                         let rgb = color_space::Rgb::new(letterbox_vec[pixel_idx][0] as f64,
                                                         letterbox_vec[pixel_idx][1] as f64,
                                                         letterbox_vec[pixel_idx][2] as f64);
                         let hsv = color_space::Hsv::from(rgb);
                         for region in regions.iter_mut() {
-                            if region.is_in((x as u16, y as u16)) { region.add_brightness(hsv.v) }
+                            if region.is_in((x, y)) { region.add_brightness(hsv.v) }
                         }
 
                         x = x + 1;
@@ -305,8 +305,8 @@ impl YoloV3Tiny {
 }
 
 pub struct Region {
-    start: (u16, u16),
-    end: (u16, u16),
+    start: (u32, u32),
+    end: (u32, u32),
     total_brightness: f64
 }
 
@@ -314,22 +314,22 @@ impl Region {
     pub fn new(s : (f32, f32), e : (f32, f32)) -> Result<Self> {
         let values = [s.0, s.1, e.0, e.1];
         ensure!(values.iter().all(|f| f.is_sign_positive()), "Coordinates must be positive");
-        let start = (s.0.floor() as u16, s.1.floor() as u16);
-        let end = (e.0.floor() as u16, e.1.floor() as u16);
+        let start = (s.0.floor() as u32, s.1.floor() as u32);
+        let end = (e.0.floor() as u32, e.1.floor() as u32);
         let total_brightness = 0.0;
         Ok(Self { start, end, total_brightness} )
     }
 
-    pub fn width(&self) -> u16 {
+    pub fn width(&self) -> u32 {
         self.end.0.abs_diff(self.start.0)
     }
 
 
-    pub fn height(&self) -> u16 {
+    pub fn height(&self) -> u32 {
         self.end.1.abs_diff(self.start.1)
     }
 
-    pub fn is_in(&self, p: (u16, u16)) -> bool {
+    pub fn is_in(&self, p: (u32, u32)) -> bool {
         self.start.0 < p.0 && self.start.1 < p.1 && self.end.0 > p.0 && self.end.1 > p.1
     }
 
