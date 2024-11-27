@@ -253,46 +253,60 @@ impl YoloV3Tiny {
             let letterbox_vec = letterbox_img.pixels().collect::<Vec<_>>();
 
             for d_data in objs_rev.iter_mut() {
-                if d_data.class <= 2 {
-                    let trim_w: f32 = (d_data.x2 - d_data.x1) * self.trim_rate;
-                    let bbox = Region::new((d_data.x1 + trim_w, d_data.y1), (d_data.x2 - trim_w, d_data.y2))?;
-                    let region_w = bbox.width() / self.n_regions;
-                    let region_h = bbox.height();
+                if d_data.class <= 2 { // 信号機の場合のみ処理を行う
 
-                    let mut regions = Vec::new();
-                    for idx in 0..self.n_regions {
-                        let start_x = bbox.start.0 + idx * region_w;
-                        let start_y = bbox.start.1;
-                        let end_x = start_x + region_w;
-                        let end_y = start_y + region_h;
-                        let new_region = Region::new((start_x as f32, start_y as f32), (end_x as f32, end_y as f32))?;
-                        regions.push(new_region);
+                    // バウンディングボックス内に含まれる背景を排除する必要がある
+                    // そのために、バウンディングボックス内の両端を切り取る
+                    let trim_w: f32 = (d_data.x2 - d_data.x1) * self.trim_rate; // 切り取る両端の幅trim_rateパラメータで何％切り取るか設定
+                    let bbox = Region::new((d_data.x1 + trim_w, d_data.y1), (d_data.x2 - trim_w, d_data.y2))?; // 両端を切り取ったバウンディングボックスの領域を生成
+
+                    // バウンディングボックス内を、信号機それぞれの領域に分割する
+                    // n_regionsは何個に分割するかを設定するパラメータ
+                    let region_w = bbox.width() / self.n_regions; // 分割した領域の幅を設定
+                    let region_h = bbox.height(); // 分割した領域の高さを設定
+
+                    let mut regions = Vec::new(); // 分割した領域を入れるためのベクトル
+                    for idx in 0..self.n_regions { // 分割する領域の数だけ、領域を生成する
+                        let start_x = bbox.start.0 + idx * region_w; // 領域の左上のx座標
+                        let start_y = bbox.start.1; // 領域の左上のy座標
+                        let end_x = start_x + region_w; // 領域の右下のx座標
+                        let end_y = start_y + region_h; // 領域の右下のy座標
+                        let new_region = Region::new((start_x as f32, start_y as f32), (end_x as f32, end_y as f32))?; // 領域生成
+                        regions.push(new_region); // 生成した領域をベクトルに入れる
                     }
 
+                    //***** ここから輝度を求める処理*****
                     let mut x = bbox.start.0;
                     let mut y = bbox.start.1;
 
+                    // 全ピクセルのRGBをHSVに変換する
                     while y < bbox.end.1.into() {
-                        let pixel_idx = (y * letterbox_img.width() + x) as usize;
+                        let pixel_idx = (y * letterbox_img.width() + x) as usize; // 座標から、一次元配列のインデックスを算出
 
+                        // color_spaceクレートがRGBからHSVへの変換をしてくれる
+                        // まずはRGBとして生成
                         let rgb = color_space::Rgb::new(letterbox_vec[pixel_idx][0] as f64,
                                                         letterbox_vec[pixel_idx][1] as f64,
                                                         letterbox_vec[pixel_idx][2] as f64);
-                        let hsv = color_space::Hsv::from(rgb);
-                        for region in regions.iter_mut() {
+                        let hsv = color_space::Hsv::from(rgb); // HSVに変換
+                        
+                        // 座標x,yが分割した領域に含まれていたら、その領域の輝度の総和に加算
+                        for region in regions.iter_mut() { // 分割した領域分繰り返す
+                            // もしx,yが領域内であるならば、その領域の輝度の総和に加算
                             if region.is_in((x, y)) { region.add_brightness(hsv.v) }
                         }
 
-                        x = x + 1;
-                        if x == bbox.end.0 { x = bbox.start.0; y = y + 1;}
+                        x = x + 1; // x座標を右にずらす
+                        if x == bbox.end.0 { x = bbox.start.0; y = y + 1;} // もしバウンディングボックスの右端までみたら、x座標を左端まで戻して、y座標を下にずらす
                     }
 
+                    // 各領域の輝度の総和を比較し、信号機の色を判定
                     let class = regions.iter().enumerate()
-                        .max_by(|(_, r1), (_, r2)| r1.total_brightness.total_cmp(&r2.total_brightness))
+                        .max_by(|(_, r1), (_, r2)| r1.total_brightness.total_cmp(&r2.total_brightness)) // 輝度の総和が最大となる領域の、インデックスを算出
                         .map(|(idx, _)|{
-                            if idx == 0 { 2 }
-                            else if idx == (self.n_regions - 1) as usize { 0 }
-                            else { 1 }
+                            if idx == 0 { 2 } // もし左端の領域の輝度が最大なら、青
+                            else if idx == (self.n_regions - 1) as usize { 0 } // もし右端の領域の輝度が最大なら、赤
+                            else { 1 } // それ以外の領域の輝度が最大なら、黄
                         })
                         .unwrap();
                     d_data.class = class;
