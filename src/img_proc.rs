@@ -48,7 +48,7 @@ pub fn place_pixels(data: &mut [i16], img: &DynamicImage, size: u32, x_offset: u
     }
 }
 
-fn fast_resize(src_img: &RgbImage, dst_width: u32, dst_height: u32) -> RgbImage {
+pub fn fast_resize(src_img: &RgbImage, dst_width: u32, dst_height: u32) -> RgbImage {
     let width = NonZeroU32::new(src_img.width()).unwrap();
     let height = NonZeroU32::new(src_img.height()).unwrap();
 
@@ -287,7 +287,7 @@ fn draw_line(
 /// * `x1`, `y1`, `x2`, `y2` - 矩形の左上と右下の座標
 /// * `thickness` - 線の太さ
 /// * `color` - 線の色
-fn draw_rect(
+pub fn draw_rect(
     img: &mut image::RgbImage,
     x1: f32,
     y1: f32,
@@ -313,7 +313,7 @@ fn draw_rect(
 /// * `font` - ラベルのフォント
 /// * `font_size` - ラベルのフォントサイズ
 /// * `text` - ラベルに表示するテキスト
-fn draw_label(
+pub fn draw_label(
     img: &mut image::RgbImage,
     x1: f32,
     y1: f32,
@@ -386,5 +386,31 @@ pub fn draw_bbox(
 
         let text = format!("{}: {:.2}", d.class, d.confidence);
         draw_label(img, x1, y1, line_thickness, color, &font, font_size, &text);
+    }
+}
+
+/// RGB値から色相を計算します。
+pub fn calculate_hue(r: f64, g: f64, b: f64) -> f64 {
+    let c_max = r.max(g).max(b);
+    let c_min = r.min(g).min(b);
+    let delta = c_max - c_min;
+
+    // グレースケール
+    if delta == 0.0 {
+        return 0.0;
+    }
+
+    let hue = if c_max == r {
+        60.0 * (((g - b) / delta) % 6.0)
+    } else if c_max == g {
+        60.0 * (((b - r) / delta) + 2.0)
+    } else {
+        60.0 * (((r - g) / delta) + 4.0)
+    };
+
+    if hue < 0.0 {
+        hue + 360.0
+    } else {
+        hue
     }
 }
