@@ -24,3 +24,4 @@ pub mod yolov3_tiny;
 
 mod nms;
 mod yolo;
+mod region;
