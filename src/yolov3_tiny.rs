@@ -520,8 +520,8 @@ impl YoloV3Tiny {
 
                 // 判定
                 const MIN_BRIGHT_RATIO: f64 = 1.05;
-                const MAX_BRIGHT_RATIO: f64 = 5.0;
-                const MIN_ABSOLUTE_BRIGHTNESS: f64 = 0.55;
+                const MAX_BRIGHT_RATIO: f64 = 3.0;
+                const MIN_ABSOLUTE_BRIGHTNESS: f64 = 0.5;
                 const RED_HUE_RANGE: (f64, f64) = (320.0, 360.0);
                 const YELLOW_HUE_RANGE: (f64, f64) = (20.0, 40.0);
                 const BLUE_HUE_RANGE: (f64, f64) = (160.0, 200.0);
