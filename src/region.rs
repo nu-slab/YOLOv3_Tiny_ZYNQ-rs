@@ -24,7 +24,9 @@ impl Region {
         ensure!(start.0 <= end.0 && start.1 <= end.1, "Start coordinates must be less than or equal to end coordinates");
 
         let total_brightness = 0.0;
-        let total_r = 0.0; let total_g = 0.0; let total_b = 0.0;
+        let total_r = 0.0;
+        let total_g = 0.0;
+        let total_b = 0.0;
         let pixel_count = 0;
 
         Ok(Self { start, end, total_brightness, total_r, total_g, total_b, pixel_count })
@@ -46,7 +48,8 @@ impl Region {
         self.total_r += r;
         self.total_g += g;
         self.total_b += b;
-        self.total_brightness += v; self.pixel_count += 1;
+        self.total_brightness += v;
+        self.pixel_count += 1;
     }
 
     pub fn avg_brightness(&self) -> f64 {
